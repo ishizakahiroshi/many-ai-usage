@@ -1,0 +1,28 @@
+{
+  "name": "many-ai-usage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A browser-local usage dashboard for AI subscriptions.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:chrome": "node scripts/build.mjs --target chrome",
+    "build:firefox": "node scripts/build.mjs --target firefox",
+    "dev": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "preact": "^10.26.9",
+    "valibot": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.326",
+    "esbuild": "^0.25.6",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

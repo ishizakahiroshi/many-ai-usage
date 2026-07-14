@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "many-ai-usage",
+  "version": "0.1.0",
+  "description": "See AI subscription usage in one browser-local dashboard.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "many-ai-usage"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "tabs", "scripting"],
+  "optional_host_permissions": ["*://*/*"],
+  "icons": {
+    "128": "assets/icons/icon-512.png"
+  }
+}

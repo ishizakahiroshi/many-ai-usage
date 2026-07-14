@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<!--docsweep-meta
+type: review-sheet
+status: planned
+tags: [review-sheet, many-ai-usage, mvp, open-topics]
+owner: ishizakahiroshi
+related: [plan_v0.1.0-mvp.md, reference_study-synthesis.md]
+last_reviewed: 2026-07-14
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>many-ai-usage v0.1.0 未確定論点シート — 検討シート</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1f2733; --sub:#5b6675; --line:#e2e6ec;
+    --accent:#2563eb; --accent-soft:#eaf1ff;
+    --ok:#1a7f4b; --ok-soft:#e7f5ee; --warn:#b06a00;
+    --todo:#b4232a; --todo-soft:#fdeced; --rec:#0e7c66; --rec-soft:#e3f6f1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;
+    line-height:1.75;font-size:15px}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 90px}
+  header.top{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;
+    border-radius:14px;padding:24px 26px;margin-bottom:22px;box-shadow:0 6px 22px rgba(37,99,235,.18)}
+  header.top h1{margin:0 0 6px;font-size:22px;letter-spacing:.02em}
+  header.top p{margin:0;opacity:.92;font-size:13.5px}
+  .meta{margin-top:12px;font-size:12.5px;opacity:.85}
+  h2{font-size:18px;margin:34px 0 12px;padding-left:11px;border-left:5px solid var(--accent)}
+  h3{font-size:15.5px;margin:22px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.03)}
+  p{margin:8px 0}
+  code{background:#eef1f5;border-radius:5px;padding:1px 6px;font-size:13px;
+    font-family:"Cascadia Code",Consolas,monospace}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 0}
+  .tag{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;
+    padding:2px 11px;line-height:1.6}
+  .tag.done{background:var(--ok-soft);color:var(--ok)}
+  .tag.todo{background:var(--todo-soft);color:var(--todo)}
+  .tag.rec{background:var(--rec-soft);color:var(--rec)}
+  .tag.p1{background:#efe7fb;color:#6b3fb8}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f0f3f8;font-weight:600}
+  .arch{background:#0f172a;color:#cfe0ff;border-radius:10px;padding:16px 18px;
+    font-family:"Cascadia Code",Consolas,monospace;font-size:13px;white-space:pre;overflow-x:auto}
+  .glossary dl{margin:6px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px}
+  .glossary dt{font-weight:700;color:var(--accent)}
+  .glossary dd{margin:0}
+  .callout{background:#fff7ed;border:1px solid #f3d8a8;border-left:5px solid var(--warn);
+    border-radius:10px;padding:14px 18px;margin:14px 0}
+  .callout b{color:var(--warn)}
+  .decision{border-left:5px solid var(--todo)}
+  .decision .qid{display:inline-block;background:var(--todo);color:#fff;font-weight:700;
+    border-radius:6px;padding:1px 9px;font-size:13px;margin-right:8px}
+  .why{background:#f3f8ff;border:1px solid #d4e4fb;border-radius:9px;
+    padding:11px 14px;margin:10px 0;font-size:13.5px;color:#33445e}
+  .why .row{margin:3px 0}
+  .why b{color:var(--accent)}
+  .opts{margin:12px 0 6px}
+  .opt{display:flex;gap:9px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);
+    border-radius:8px;margin:7px 0;cursor:pointer;background:#fcfdff;transition:.12s}
+  .opt:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .opt input{margin-top:5px}
+  .opt .lbl{flex:1}
+  .opt .opt-main{font-weight:600}
+  .opt .opt-sub{display:block;font-size:12.5px;color:var(--sub);font-weight:400;margin-top:2px}
+  .opt .rec-mark{font-size:11px;color:var(--rec);font-weight:700;border:1px solid var(--rec);
+    border-radius:999px;padding:0 7px;white-space:nowrap;margin-left:6px;align-self:flex-start}
+  .memo{width:100%;min-height:54px;border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-family:inherit;font-size:13.5px;resize:vertical;margin-top:8px}
+  .memo::placeholder{color:#aab2bd}
+  .guidefill{min-height:120px}
+  .toolbar{position:sticky;bottom:0;background:rgba(246,247,249,.94);backdrop-filter:blur(4px);
+    border-top:1px solid var(--line);padding:12px 0;margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
+  button{font:inherit;font-weight:600;border:none;border-radius:9px;padding:10px 18px;
+    cursor:pointer;background:var(--accent);color:#fff}
+  button.ghost{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+  button:hover{filter:brightness(1.05)}
+  #summaryBox{width:100%;min-height:200px;margin-top:12px;border:1px solid var(--line);
+    border-radius:10px;padding:12px;font-family:"Cascadia Code",Consolas,monospace;font-size:13px}
+  .note{font-size:12.5px;color:var(--sub)}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:3px 0}
+
+  body.static .opt input{display:none}
+  body.static .opt .lbl::before{content:"☐  ";font-size:16px;color:#445}
+  body.static .memo{min-height:0}
+  body.static .memo::after{content:""}
+  body.static .toolbar,body.static #summarySection,body.static .note.interactive-only{display:none}
+  body.static .memo{border:none;border-bottom:1px dashed #b9c1cc;border-radius:0;min-height:48px}
+
+  @media print{
+    body{background:#fff} .toolbar{display:none} .opt:hover{background:#fcfdff}
+    header.top{box-shadow:none}
+  }
+</style>
+</head>
+<body class="interactive">
+<div class="wrap">
+
+<header class="top">
+  <h1>many-ai-usage v0.1.0 未確定論点シート</h1>
+  <p>plan_v0.1.0-mvp.md の &lt;OPEN&gt; タグを 1 個ずつ決着させ、C1〜C8 を実装可能状態にする</p>
+  <div class="meta">最終更新: 2026-07-14(火) 01:14:30 ／ 対象: many-ai-usage v0.1.0 MVP 実装計画 ／ 出席想定: 作者 (ishizakahiroshi) 1 人</div>
+</header>
+
+<div class="legend">
+  <span class="tag done">■ 決定済み</span>
+  <span class="tag todo">■ 未決定（本日の相談）</span>
+  <span class="tag rec">■ おすすめ案</span>
+</div>
+<p class="note">※ 各論点に「何を決める / なぜ大事 / trade-off」を短く付けています。用語は下の「用語ミニ解説」を参照。</p>
+
+<h2>1. 全体像（まず絵で）</h2>
+<div class="card">
+  <h3>やりたいこと（一言で）</h3>
+  <p>複数 AI サービスのサブスク使用量を「URL を登録するだけ」で 1 画面にまとめて見るブラウザ拡張(MV3・Chrome / Firefox ハイブリッド・サーバーなし)。v0.1.0 は自動解析で拾えなくても tile fallback で一覧化が必ず成立するのを完成定義にする。</p>
+</div>
+
+<div class="card"><h3>plan の構成</h3><div class="arch">C1 リポ骨格
+      │
+      ├─ C2 storage schema  ─┐
+      │                       │
+      ├─ C3 自動解析エンジン ─┤
+      │                       │
+      │                       ▼
+      └─→ C4 取得 pipeline (content + background)
+                              │
+                              ▼
+              ┌───────────────┼───────────────┐
+              │               │               │
+              ▼               ▼               ▼
+        C5 登録 UI     C6 dashboard    C7 tile fallback
+              │               │               │
+              └───────┬───────┴───────────────┘
+                      ▼
+                 C8 リリース準備</div></div>
+
+<div class="callout"><b>MVP スコープ (確定済み)：</b> 自動解析 + tile fallback + user visit capture + 手動再取得。教える型と background refresh は v0.2 以降。</div>
+
+<div class="card glossary">
+  <h3>用語ミニ解説（迷ったらここ）</h3>
+  <dl>
+    <dt>bundler</dt><dd>TypeScript のソースを 1 つの JS に束ねて拡張として動く形にする道具。vite / esbuild / wxt など。</dd>
+    <dt>manifest</dt><dd>拡張の宣言ファイル(<code>manifest.json</code>)。名前・権限・エントリポイントを書く。MV3 = Manifest V3。</dd>
+    <dt>host permission</dt><dd>「このドメインのページを読む許可」。MV3 では optional にでき、ユーザーが URL 登録するタイミングで要求できる。</dd>
+    <dt>hydration wait</dt><dd>SPA が JS で本体を描き終わるのを待つこと。<code>document.readyState=complete</code> だけでは不足。</dd>
+    <dt>shadow DOM</dt><dd>ページ内に「独立した DOM 領域」を作る web components の仕組み。open なら外から辿れる、closed なら不可。</dd>
+    <dt>confidence</dt><dd>自動解析が「これは usage の値だ」と思う自信度(0-1)。閾値以下なら採用しない。</dd>
+    <dt>tile fallback</dt><dd>数値を抽出できない URL を、「開くリンク付きの表示型カード」として並べて一覧化価値を残す最終手段。</dd>
+    <dt>runtime validator</dt><dd>storage から読んだ JSON を実行時に型チェックする道具。zod / valibot など。</dd>
+  </dl>
+</div>
+
+<h2>2. すでに決まっていること（確認だけ）</h2>
+<div class="card">
+  <table>
+    <tr><th>項目</th><th>決定内容</th></tr>
+    <tr><td>MVP スコープ</td><td>B 案: 自動解析 + tile fallback + user visit capture + 手動再取得</td></tr>
+    <tr><td>教える型 / background refresh</td><td>v0.2 以降に外出し</td></tr>
+    <tr><td>provider knowledge</td><td>Claude / Codex のサンプル 2 件のみ。built-in parser は持たない</td></tr>
+    <tr><td>認証</td><td>ユーザーのブラウザセッションを読むだけ。Cookie/token を保存・外部送信しない</td></tr>
+    <tr><td>storage 対象</td><td>ProviderConfig / NormalizedSnapshot / ProviderRuntimeState / anchor fingerprint のみ。raw HTML は保存しない</td></tr>
+    <tr><td>スキーマ設計</td><td>synthesis §3 (provider.v1) と §4 (NormalizedSnapshot) を v1 として採用</td></tr>
+  </table>
+</div>
+
+<h2>3. これから決めること（本日の相談）</h2>
+<p class="note interactive-only">各項目で選択肢を選び、メモ欄に補足を書いてください。最後の「決定サマリを出力」で選んだ内容がまとまります。</p>
+
+<h3>A. C1 リポ骨格</h3>
+
+<div class="card decision">
+  <p><span class="qid">A1</span> <b>bundler の選定 (§C1-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> TypeScript ソースから Chrome/Firefox 用の拡張成果物を作る道具を何にするか。</div>
+    <div class="row"><b>なぜ大事？</b> 選択次第で manifest 差分の吸収層(§Cross-2)・UI framework(§C6-1)・CI 構成が連動する。ここが要石。</div>
+  </div>
+  <div class="opts" data-q="A1">
+    <label class="opt"><input type="radio" name="A1"><span class="lbl"><span class="opt-main">参考実装(always-pinned / tab-title-prefix)と同一の bundler に揃える</span><span class="opt-sub">house 標準に揃えるのが第一候補。実装確認後にこの radio を採択、参考実装の中身を A1a として書き込む。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="A1"><span class="lbl"><span class="opt-main">wxt (WebExtension 特化フレームワーク)</span><span class="opt-sub">manifest 差分吸収・HMR・両ストアビルドが標準機能。学習コストと依存増と引き換えに骨格作業が減る。</span></span></label>
+    <label class="opt"><input type="radio" name="A1"><span class="lbl"><span class="opt-main">vite + 自作 build script</span><span class="opt-sub">bundler として広く実績、フレームワーク依存が薄い。manifest 差分吸収は自作(§Cross-2 と連動)。</span></span></label>
+    <label class="opt"><input type="radio" name="A1"><span class="lbl"><span class="opt-main">esbuild 直叩き + 自作 build script</span><span class="opt-sub">最軽量・依存最少。CI が速い。設定は全部自作。</span></span></label>
+    <label class="opt"><input type="radio" name="A1"><span class="lbl"><span class="opt-main">未定 (参考実装を先に確認する)</span><span class="opt-sub">A1a を書き出す前段として保留。</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="参考実装の bundler を確認したら A1a としてメモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">A2</span> <b>LICENSE (§C1-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> リポの LICENSE を何にするか。</div>
+    <div class="row"><b>なぜ大事？</b> 個人 OSS の慣例で MIT 想定だが、初期に決めておく方が後から書き換えるより健全。</div>
+  </div>
+  <div class="opts" data-q="A2">
+    <label class="opt"><input type="radio" name="A2"><span class="lbl"><span class="opt-main">MIT</span><span class="opt-sub">個人 OSS の家標準。always-pinned / tab-title-prefix と揃う。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="A2"><span class="lbl"><span class="opt-main">Apache-2.0</span><span class="opt-sub">特許明示条項が入る。企業寄与を将来受ける可能性を厚めに見るなら。</span></span></label>
+    <label class="opt"><input type="radio" name="A2"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>B. C2 storage schema</h3>
+
+<div class="card decision">
+  <p><span class="qid">B1</span> <b>runtime validator (§C2-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> storage から読んだ JSON を実行時に型チェックする道具。</div>
+    <div class="row"><b>なぜ大事？</b> 拡張は bundle size に敏感(popup 起動速度)。ただし schema 数は少ないので数 KB 差。</div>
+  </div>
+  <div class="opts" data-q="B1">
+    <label class="opt"><input type="radio" name="B1"><span class="lbl"><span class="opt-main">valibot</span><span class="opt-sub">tree-shaking が効き、bundle が小さい。API は zod に近い。拡張向き。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="B1"><span class="lbl"><span class="opt-main">zod</span><span class="opt-sub">実績・情報量が圧倒的。bundle は数 KB 増だが安全パイ。</span></span></label>
+    <label class="opt"><input type="radio" name="B1"><span class="lbl"><span class="opt-main">TS 型のみ + 手書き narrow 関数</span><span class="opt-sub">依存ゼロ。schema 変更のたびに narrow 関数を書き直す運用コストが発生。</span></span></label>
+    <label class="opt"><input type="radio" name="B1"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">B2</span> <b>metrics 配列の MVP 範囲 (§C2-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> v0.1.0 では metrics 配列の taught 分岐を実装するか、型だけ用意して writer は書かないか。</div>
+    <div class="row"><b>なぜ大事？</b> 教える型は v0.2 送りが確定済み。ここは型だけ入れておくと v0.2 の migration が要らない。</div>
+  </div>
+  <div class="opts" data-q="B2">
+    <label class="opt"><input type="radio" name="B2"><span class="lbl"><span class="opt-main">型は synthesis §3 準拠で全部入れる / v0.1.0 の writer は auto 由来のみ</span><span class="opt-sub">v0.2 で taught writer を足すだけで migration 不要。おすすめ。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="B2"><span class="lbl"><span class="opt-main">v0.1.0 では auto 用の最小型のみ / v0.2 で拡張</span><span class="opt-sub">初期の型が薄い分読みやすいが、v0.2 で storage migration が要る。</span></span></label>
+    <label class="opt"><input type="radio" name="B2"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">B3</span> <b>stale 判定閾値 (§C2-3)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> 最終取得から何経過で「古い(stale)」表示にするか。</div>
+    <div class="row"><b>なぜ大事？</b> 短すぎると常に stale で信頼を落とし、長すぎると古い値を成功値のように見せる。</div>
+  </div>
+  <div class="opts" data-q="B3">
+    <label class="opt"><input type="radio" name="B3"><span class="lbl"><span class="opt-main">refreshIntervalMinutes × 2</span><span class="opt-sub">初期案。デフォルト 15 分なら 30 分で stale。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="B3"><span class="lbl"><span class="opt-main">refreshIntervalMinutes × 3</span><span class="opt-sub">やや寛容。user visit capture が既定なので長めに許容する派。</span></span></label>
+    <label class="opt"><input type="radio" name="B3"><span class="lbl"><span class="opt-main">固定 60 分</span><span class="opt-sub">interval に依存しない。UI 説明が単純。</span></span></label>
+    <label class="opt"><input type="radio" name="B3"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>C. C3 自動解析エンジン</h3>
+
+<div class="card decision">
+  <p><span class="qid">C1</span> <b>多言語ラベル辞書の置き場所 (§C3-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> 「remaining」「残り」「剩余」等の label 辞書をどこに持つか。</div>
+    <div class="row"><b>なぜ大事？</b> detector が参照するので host に近い方が読みやすいが、UI とも共有する可能性がある。</div>
+  </div>
+  <div class="opts" data-q="C1">
+    <label class="opt"><input type="radio" name="C1"><span class="lbl"><span class="opt-main"><code>src/content/detector/i18n/labels.ts</code> に静的テーブル</span><span class="opt-sub">detector 内で完結。UI 側は別辞書を持つ(責務分離)。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="C1"><span class="lbl"><span class="opt-main"><code>src/shared/i18n/labels.ts</code> に一元化</span><span class="opt-sub">UI と detector で共有。将来 UI 多言語化する時に一箇所で済む。</span></span></label>
+    <label class="opt"><input type="radio" name="C1"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">C2</span> <b>shadow DOM 対応範囲 (§C3-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> どこまで DOM を歩いて数値候補を探すか。</div>
+    <div class="row"><b>なぜ大事？</b> 広げるほど拾えるが、closed shadow root と cross-origin iframe は原理的に無理。</div>
+  </div>
+  <div class="opts" data-q="C2">
+    <label class="opt"><input type="radio" name="C2"><span class="lbl"><span class="opt-main">top document + open shadow root のみ</span><span class="opt-sub">MVP はここに絞る。closed shadow root / cross-origin iframe は tile fallback へフォールスルー。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="C2"><span class="lbl"><span class="opt-main">top document のみ (shadow DOM は v0.2 で対応)</span><span class="opt-sub">実装最小。ただし web components 使いのページで空振りが増える。</span></span></label>
+    <label class="opt"><input type="radio" name="C2"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">C3</span> <b>confidence 採用閾値と tile fallback (§C3-3)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> confidence 何以上を採用するか、下回った時 v0.1.0 では何にフォールスルーするか。</div>
+    <div class="row"><b>なぜ大事？</b> 教える型が v0.2 送りなので、低 confidence 時の受け皿は tile fallback しかない。</div>
+  </div>
+  <div class="opts" data-q="C3">
+    <label class="opt"><input type="radio" name="C3"><span class="lbl"><span class="opt-main">閾値 0.6、下回ったら tile fallback</span><span class="opt-sub">初期案どおり。実データで様子見てチューニング。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="C3"><span class="lbl"><span class="opt-main">閾値 0.7 (厳しめ) → tile fallback</span><span class="opt-sub">誤検出を抑えるが tile 化が増える。tile UI の質が試される。</span></span></label>
+    <label class="opt"><input type="radio" name="C3"><span class="lbl"><span class="opt-main">閾値 0.5 (甘め) → tile fallback</span><span class="opt-sub">拾える幅を広げる。誤検出時のユーザー説明が難しい。</span></span></label>
+    <label class="opt"><input type="radio" name="C3"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>D. C4 取得 pipeline</h3>
+
+<div class="card decision">
+  <p><span class="qid">D1</span> <b>hydration wait (§C4-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> SPA が描き終わるのを何秒待つか、どう待つか。</div>
+    <div class="row"><b>なぜ大事？</b> 短いと空の skeleton を読む、長いと popup 描画が遅くなる。</div>
+  </div>
+  <div class="opts" data-q="D1">
+    <label class="opt"><input type="radio" name="D1"><span class="lbl"><span class="opt-main">MutationObserver quiet window 500ms + 上限 5 秒</span><span class="opt-sub">初期案。DOM 変化が 500ms 止まったら hydrated とみなす。上限で暴走防止。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="D1"><span class="lbl"><span class="opt-main">quiet window 800ms + 上限 8 秒 (寛容)</span><span class="opt-sub">重い SPA を取り逃さない。</span></span></label>
+    <label class="opt"><input type="radio" name="D1"><span class="lbl"><span class="opt-main">固定 wait 2 秒</span><span class="opt-sub">実装最小。無駄待ちが増える。</span></span></label>
+    <label class="opt"><input type="radio" name="D1"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">D2</span> <b>手動再取得中に tab が閉じた時の handling (§C4-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> 再取得中に対象タブが閉じられたら runtime state をどうするか。</div>
+    <div class="row"><b>なぜ大事？</b> silently 成功偽装は避ける。ユーザーに「なぜ更新されなかった」を残す。</div>
+  </div>
+  <div class="opts" data-q="D2">
+    <label class="opt"><input type="radio" name="D2"><span class="lbl"><span class="opt-main">error 状態にし、原因ラベルを "tab closed during refresh" にする</span><span class="opt-sub">前 snapshot は残し、次回の user visit capture で自動回復。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="D2"><span class="lbl"><span class="opt-main">warning のみで前値を維持</span><span class="opt-sub">error より柔らかい。ただし失敗を軽く見せる懸念。</span></span></label>
+    <label class="opt"><input type="radio" name="D2"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>E. C5 登録 UI + permission</h3>
+
+<div class="card decision">
+  <p><span class="qid">E1</span> <b>needs_permission の扱い (§C5-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> host permission 拒否時の状態を synthesis §3 の status enum に足すか、runtime state 側で扱うか。</div>
+    <div class="row"><b>なぜ大事？</b> schema v1 を凍結するので、後から enum を足すと migration が発生する。</div>
+  </div>
+  <div class="opts" data-q="E1">
+    <label class="opt"><input type="radio" name="E1"><span class="lbl"><span class="opt-main">runtime state の status enum に <code>needs_permission</code> を追加して凍結</span><span class="opt-sub">状態遷移が 1 箇所に集約される。schema v1 に最初から入れる。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="E1"><span class="lbl"><span class="opt-main">status は既存 enum のまま、別 boolean <code>permissionGranted</code> を足す</span><span class="opt-sub">責務分離。ただし UI が 2 変数を見に行く必要がある。</span></span></label>
+    <label class="opt"><input type="radio" name="E1"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">E2</span> <b>サンプル 2 件の URL 具体 (§C5-2)（記入式）</b></p>
+  <div class="why">
+    <div class="row"><b>お願い：</b> Claude と Codex(OpenAI) の usage ページ URL を確定してメモ欄に書く。実 URL は公開情報なので機密ではない(実 usage 値・アカウント ID は書かない)。</div>
+  </div>
+  <textarea class="memo guidefill" placeholder="① Claude usage URL: (例: https://claude.ai/settings/usage 相当)&#10;② Codex/OpenAI usage URL: (例: https://platform.openai.com/usage 相当)&#10;③ 補足: ログインが必要なページか / redirect の有無 / 自動解析で拾えそうな要素の目算"></textarea>
+</div>
+
+<h3>F. C6 ダッシュボード UI</h3>
+
+<div class="card decision">
+  <p><span class="qid">F1</span> <b>UI フレームワーク (§C6-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> popup / options / full page を書く道具。</div>
+    <div class="row"><b>なぜ大事？</b> bundler(§A1) と連動。popup 起動速度に直結する bundle size を左右する。</div>
+  </div>
+  <div class="opts" data-q="F1">
+    <label class="opt"><input type="radio" name="F1"><span class="lbl"><span class="opt-main">Preact (signals or classic)</span><span class="opt-sub">bundle 数 KB。React エコを流用しつつ軽い。個人 OSS の家標準にしやすい。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="F1"><span class="lbl"><span class="opt-main">素の TS + web components</span><span class="opt-sub">依存ゼロ・最軽量。ただし状態管理・DOM 更新は自力。</span></span></label>
+    <label class="opt"><input type="radio" name="F1"><span class="lbl"><span class="opt-main">Svelte</span><span class="opt-sub">runtime が小さく DX 良好。ただし bundler(§A1)と噛み合わせが要る。</span></span></label>
+    <label class="opt"><input type="radio" name="F1"><span class="lbl"><span class="opt-main">Solid</span><span class="opt-sub">reactive の粒度が細かく速い。参考実装が薄いのが弱み。</span></span></label>
+    <label class="opt"><input type="radio" name="F1"><span class="lbl"><span class="opt-main">未定 (§A1 参考実装確認と連動)</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">F2</span> <b>popup の情報密度 (§C6-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> 1 プロバイダあたり popup にいくつの metric を出すか。</div>
+    <div class="row"><b>なぜ大事？</b> 複数 window(5h / weekly / monthly) を持つプロバイダで隠しすぎると synthesis §6 の「複数 window を隠さない」に反する。</div>
+  </div>
+  <div class="opts" data-q="F2">
+    <label class="opt"><input type="radio" name="F2"><span class="lbl"><span class="opt-main">lowest remaining の 1 metric を主表示 / それ以外は折りたたみで見せる</span><span class="opt-sub">一次ビューは簡潔、詳細も隠さない。synthesis §6 準拠。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="F2"><span class="lbl"><span class="opt-main">全 metric を最初から縦に並べる</span><span class="opt-sub">情報量最大。popup が縦に長くなる。</span></span></label>
+    <label class="opt"><input type="radio" name="F2"><span class="lbl"><span class="opt-main">1 プロバイダ 1 metric に固定 / 詳細は full page でのみ</span><span class="opt-sub">popup は最軽量。複数 window を popup で確認できない。</span></span></label>
+    <label class="opt"><input type="radio" name="F2"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">F3</span> <b>icon 生成タイミング (§C6-3)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> make-icon skill で icon 一式を作るのを C8(リリース準備) で扱うか、もっと早いか。</div>
+    <div class="row"><b>なぜ大事？</b> 開発中の toolbar icon はプレースホルダで足りる。ストア素材で必須。</div>
+  </div>
+  <div class="opts" data-q="F3">
+    <label class="opt"><input type="radio" name="F3"><span class="lbl"><span class="opt-main">C8 で扱う (v0.1.0 開発中はプレースホルダ)</span><span class="opt-sub">plan 通り。開発リソースを機能に集中。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="F3"><span class="lbl"><span class="opt-main">C1 の直後に作る (プロジェクトの顔を早く決める)</span><span class="opt-sub">モチベーション向上。あとで作り直す手戻り可能性。</span></span></label>
+    <label class="opt"><input type="radio" name="F3"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>G. C7 tile fallback</h3>
+
+<div class="card decision">
+  <p><span class="qid">G1</span> <b>tile 化の条件 (§C7-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> どのタイミングで自動解析を諦めて tile fallback にするか。</div>
+    <div class="row"><b>なぜ大事？</b> 候補ゼロだけを条件にすると誤検出が数字として出る、低 confidence も含めると tile 化が増える。</div>
+  </div>
+  <div class="opts" data-q="G1">
+    <label class="opt"><input type="radio" name="G1"><span class="lbl"><span class="opt-main">候補ゼロ OR confidence < 閾値(§C3) の両方で tile 化</span><span class="opt-sub">誤検出リスクを優先的に抑える。tile 化が増える分は UI 品質で受ける。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="G1"><span class="lbl"><span class="opt-main">候補ゼロのときのみ tile 化</span><span class="opt-sub">拾える幅を広げる。誤検出時の UI 説明が難しい。</span></span></label>
+    <label class="opt"><input type="radio" name="G1"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">G2</span> <b>tile に favicon を出すか (§C7-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> tile カードにサイトの favicon を表示するか。</div>
+    <div class="row"><b>なぜ大事？</b> favicon 取得には host permission か Google の favicon proxy が要る。プライバシー原則(外部送信しない)と噛む。</div>
+  </div>
+  <div class="opts" data-q="G2">
+    <label class="opt"><input type="radio" name="G2"><span class="lbl"><span class="opt-main">host permission がある host のみローカル取得で表示 / 無ければ非表示</span><span class="opt-sub">外部送信ゼロ。permission がある host なら <code>&lt;link rel=icon&gt;</code> をローカルで解決。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="G2"><span class="lbl"><span class="opt-main">MVP は favicon を出さない</span><span class="opt-sub">実装最小・プライバシー説明が単純。UI 情報量が下がる。</span></span></label>
+    <label class="opt"><input type="radio" name="G2"><span class="lbl"><span class="opt-main">Google の favicon proxy を使う</span><span class="opt-sub">実装最小だが登録 URL を Google に投げるので採用しない候補。</span></span></label>
+    <label class="opt"><input type="radio" name="G2"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>H. C8 リリース準備</h3>
+
+<div class="card decision">
+  <p><span class="qid">H1</span> <b>version 戦略 (§C8-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> 初回リリースを 0.1.0 で出すか、0.0.1 で pipeline を先に通すか。</div>
+    <div class="row"><b>なぜ大事？</b> ストア審査を通した実績がある方が本番の 0.1.0 が確実。</div>
+  </div>
+  <div class="opts" data-q="H1">
+    <label class="opt"><input type="radio" name="H1"><span class="lbl"><span class="opt-main">0.0.1 で pipeline 動作確認 → 0.1.0 で MVP 公開</span><span class="opt-sub">GHA + release skill + 両ストア審査の初回を機能薄い状態で通しておく。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="H1"><span class="lbl"><span class="opt-main">0.1.0 直出し</span><span class="opt-sub">リリース回数最少。初回審査で pipeline 側の落とし穴が併発するリスク。</span></span></label>
+    <label class="opt"><input type="radio" name="H1"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">H2</span> <b>privacy policy の置き場所 (§C8-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> ストア審査に必須の privacy policy をどこに置くか。</div>
+    <div class="row"><b>なぜ大事？</b> Chrome Web Store は URL 提出必須。README 節でも技術的には可だが GitHub Pages の方が住所が安定。</div>
+  </div>
+  <div class="opts" data-q="H2">
+    <label class="opt"><input type="radio" name="H2"><span class="lbl"><span class="opt-main">ishizakahiroshi.github.io に独立ページ</span><span class="opt-sub">URL が安定。他拡張(always-pinned / tab-title-prefix)と揃えられる。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="H2"><span class="lbl"><span class="opt-main">repo README 内 (anchor 指定)</span><span class="opt-sub">1 リポで完結。README の書き換えで URL が微妙に動く可能性。</span></span></label>
+    <label class="opt"><input type="radio" name="H2"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>I. 横断論点</h3>
+
+<div class="card decision">
+  <p><span class="qid">I1</span> <b>secrets-scan 実配線の動作確認タイミング (§Cross-1)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> .githooks/ 配線の動作確認をいつやるか。</div>
+    <div class="row"><b>なぜ大事？</b> 実装が進んでから壊れていることに気付くと手戻りが痛い。</div>
+  </div>
+  <div class="opts" data-q="I1">
+    <label class="opt"><input type="radio" name="I1"><span class="lbl"><span class="opt-main">C1 完了直後に空 commit + テスト commit(合成 secret 入り)で確認</span><span class="opt-sub">最初期に確認。C1 の完了条件に組み込む。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="I1"><span class="lbl"><span class="opt-main">C8 リリース準備の直前で確認</span><span class="opt-sub">まとめて確認。手戻りリスク。</span></span></label>
+    <label class="opt"><input type="radio" name="I1"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">I2</span> <b>Chrome/Firefox manifest 差分の吸収層 (§Cross-2)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> manifest.json の Chrome/Firefox 差分を build 時に生成するか、実行時分岐で吸収するか。</div>
+    <div class="row"><b>なぜ大事？</b> 実行時分岐だと manifest 側の diff は最小だが、build 時生成の方が両ストア向けに素直。</div>
+  </div>
+  <div class="opts" data-q="I2">
+    <label class="opt"><input type="radio" name="I2"><span class="lbl"><span class="opt-main">build 時生成 (共通 base manifest + 差分パッチ)</span><span class="opt-sub">bundler(§A1) が wxt / vite なら標準機能。tab-title-prefix と揃えられる。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="I2"><span class="lbl"><span class="opt-main">Chrome/Firefox で別 manifest.json を維持</span><span class="opt-sub">実装最小。同期漏れが発生しやすい。</span></span></label>
+    <label class="opt"><input type="radio" name="I2"><span class="lbl"><span class="opt-main">未定 (§A1 と連動)</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">I3</span> <b>bundler / UI framework の確定順序 (§Cross-3)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> §A1(bundler) と §F1(UI framework) をどの順序で決めるか。</div>
+    <div class="row"><b>なぜ大事？</b> wxt を選ぶと framework 選択も影響する等、連動している。</div>
+  </div>
+  <div class="opts" data-q="I3">
+    <label class="opt"><input type="radio" name="I3"><span class="lbl"><span class="opt-main">参考実装(always-pinned / tab-title-prefix)を確認 → bundler → framework の順</span><span class="opt-sub">house 標準に揃える方針。確定順序を「参考実装確認 → A1 → F1」に固定。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="I3"><span class="lbl"><span class="opt-main">framework を先に決めて bundler をそれに合わせる</span><span class="opt-sub">DX を優先。参考実装から離れる可能性。</span></span></label>
+    <label class="opt"><input type="radio" name="I3"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<div class="card decision">
+  <p><span class="qid">I4</span> <b>host permission 拒否後の provider entry の掃除 (§Cross-4)</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> 拒否したまま残された provider entry を放置するか、UI で明示的に削除を促すか。</div>
+    <div class="row"><b>なぜ大事？</b> 放置すると popup が「permission 拒否のカード」で埋まる。</div>
+  </div>
+  <div class="opts" data-q="I4">
+    <label class="opt"><input type="radio" name="I4"><span class="lbl"><span class="opt-main">残す + popup で「permission 要求 or 削除」の 2 ボタンを添える</span><span class="opt-sub">修復可能な状態にする(synthesis §6-4)。ユーザーが後で許可し直せる。</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="I4"><span class="lbl"><span class="opt-main">拒否から N 日で自動削除</span><span class="opt-sub">silent 削除は sildently 消えた感を残す。UX 危険。</span></span></label>
+    <label class="opt"><input type="radio" name="I4"><span class="lbl"><span class="opt-main">未定</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h2>4. 決定サマリ</h2>
+<div class="card" id="summarySection">
+  <p class="note">選んだ内容とメモを下に書き出します。「Markdown 形式で出力」→「.md ファイル保存」で <code>review_v0.1.0-mvp-open-topics_2026-07-14_decisions.md</code> がダウンロードされます。plan_v0.1.0-mvp.md の各 &lt;OPEN&gt; を書き換える時のソースにしてください。</p>
+  <div class="toolbar">
+    <button onclick="generateSummary()">決定サマリを出力</button>
+    <button class="ghost" onclick="copySummary()">クリップボードにコピー</button>
+    <button onclick="generateMarkdown()">Markdown 形式で出力</button>
+    <button class="ghost" onclick="downloadMarkdown()">.md ファイル保存</button>
+    <button class="ghost" onclick="window.print()">印刷 / PDF 保存</button>
+  </div>
+  <textarea id="summaryBox" placeholder="「決定サマリを出力」を押すと、選んだ選択肢とメモがここにまとまります。"></textarea>
+</div>
+
+<p class="note" style="margin-top:24px">本資料: <code>docs/local/review_v0.1.0-mvp-open-topics_2026-07-14.html</code> ／ 関連: <code>plan_v0.1.0-mvp.md</code> ／ <code>reference_study-synthesis.md</code></p>
+
+</div>
+
+<script>
+function textOfChecked(q){
+  var box=document.querySelector('.opts[data-q="'+q+'"]');
+  if(!box) return null;
+  var r=box.querySelector('input:checked');
+  if(!r) return null;
+  var opt=r.closest('.opt');
+  var main=opt.querySelector('.opt-main')||opt.querySelector('.lbl');
+  return main.innerText.trim();
+}
+function generateSummary(){
+  var out=[];
+  out.push("=== many-ai-usage v0.1.0 未確定論点シート 決定サマリ ===");
+  out.push("出力日時(端末側): "+new Date().toLocaleString('ja-JP'));
+  out.push("");
+  document.querySelectorAll('.card.decision').forEach(function(card){
+    var qidEl=card.querySelector('.qid');
+    if(!qidEl) return;
+    var qid=qidEl.innerText.trim();
+    var title=card.querySelector('p').innerText.replace(qid,'').trim();
+    var memo=card.querySelector('.memo');
+    out.push("["+qid+"] "+title);
+    var hasOpts=card.querySelector('.opts');
+    if(!hasOpts){
+      out.push("  記述: "+((memo&&memo.value.trim())||"（未記入）"));
+    }else{
+      out.push("  選択: "+(textOfChecked(qid)||"（未選択）"));
+      if(memo&&memo.value.trim()) out.push("  メモ: "+memo.value.trim());
+    }
+    out.push("");
+  });
+  document.getElementById('summaryBox').value=out.join("\n");
+}
+function copySummary(){
+  var b=document.getElementById('summaryBox');
+  if(!b.value.trim()) generateSummary();
+  b.select();
+  navigator.clipboard.writeText(b.value).then(function(){alert("コピーしました。");},
+    function(){document.execCommand('copy');alert("コピーしました。");});
+}
+function escapePipe(s){return String(s).replace(/\|/g,'\\|').replace(/\r?\n/g,' ');}
+function generateMarkdown(){
+  var out=[];
+  out.push("# many-ai-usage v0.1.0 未確定論点シート 決定記録");
+  out.push("");
+  out.push("> 出力日時(端末側): "+new Date().toLocaleString('ja-JP'));
+  out.push("");
+  out.push("## 決定サマリ");
+  out.push("");
+  out.push("| ID | 論点 | 採択 |");
+  out.push("|---|---|---|");
+  document.querySelectorAll('.card.decision').forEach(function(card){
+    var qidEl=card.querySelector('.qid');
+    if(!qidEl) return;
+    var qid=qidEl.innerText.trim();
+    var titleEl=card.querySelector('p');
+    var title=titleEl?titleEl.innerText.replace(qid,'').trim():'';
+    var sel;
+    var hasOpts=card.querySelector('.opts');
+    var memo=card.querySelector('.memo');
+    if(!hasOpts){
+      sel="（記述）"+((memo&&memo.value.trim().split(/\r?\n/)[0])||"未記入");
+    }else{
+      sel=textOfChecked(qid)||"（未選択）";
+    }
+    out.push("| "+qid+" | "+escapePipe(title)+" | "+escapePipe(sel)+" |");
+  });
+  out.push("");
+  var memos=[];
+  document.querySelectorAll('.card.decision').forEach(function(card){
+    var qidEl=card.querySelector('.qid');
+    if(!qidEl) return;
+    var qid=qidEl.innerText.trim();
+    var memo=card.querySelector('.memo');
+    if(memo&&memo.value.trim()&&card.querySelector('.opts')){
+      memos.push("### "+qid);
+      memos.push(memo.value.trim());
+      memos.push("");
+    }
+  });
+  if(memos.length){
+    out.push("## 各論点メモ");
+    out.push("");
+    Array.prototype.push.apply(out,memos);
+  }
+  document.getElementById('summaryBox').value=out.join("\n");
+}
+function downloadMarkdown(){
+  var b=document.getElementById('summaryBox');
+  if(!b.value.trim()||!b.value.startsWith('#')) generateMarkdown();
+  var content=b.value;
+  var blob=new Blob([content],{type:'text/markdown;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='review_v0.1.0-mvp-open-topics_2026-07-14_decisions.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+</script>
+</body>
+</html>

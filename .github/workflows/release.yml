@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build browser bundles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify
+        run: |
+          pnpm typecheck
+          pnpm test
+      - name: Build Chrome and Firefox bundles
+        run: pnpm build
+      - name: Validate extension bundles
+        shell: pwsh
+        run: |
+          ./scripts/validate-extension.ps1 -Target chrome
+          ./scripts/validate-extension.ps1 -Target firefox
+      - name: Package store artifacts
+        shell: pwsh
+        run: |
+          ./scripts/package-webstore.ps1 -Target chrome -Version "$env:GITHUB_REF_NAME"
+          ./scripts/package-webstore.ps1 -Target firefox -Version "$env:GITHUB_REF_NAME"
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: many-ai-usage-release-assets
+          path: dist/release-assets/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: many-ai-usage-release-assets
+          path: release-assets
+      - name: Compute SHA-256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          mapfile -d "" assets < <(find release-assets -maxdepth 1 -type f -print0)
+          [ "${#assets[@]}" -gt 0 ] || { echo "no release assets" >&2; exit 1; }
+          checksum_section=$'\n\n---\n\n## SHA-256 Checksums\n\n```\n'"$(cat release-assets/SHA256SUMS.txt)"$'\n```'
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" --title "$tag" --generate-notes
+          fi
+          body="$(gh release view "$tag" --json body --jq '.body')"
+          case "$body" in
+            *"## SHA-256 Checksums"*) : ;;
+            *) gh release edit "$tag" --notes "${body}${checksum_section}" ;;
+          esac

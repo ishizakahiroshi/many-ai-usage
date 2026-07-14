@@ -1,0 +1,543 @@
+<!doctype html>
+<!--docsweep-meta
+type: design
+status: planned
+tags: [design, many-ai-usage, mvp, visual-mock]
+owner: ishizakahiroshi
+related: [plan_v0.1.0-mvp.md, mockup_v0.1.0-mvp_2026-07-14.html]
+last_reviewed: 2026-07-14
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>many-ai-usage v0.1.0 ビジュアル完成イメージ v3 — 2026-07-14</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f3ea; --ink:#241f1a; --ink-soft:#837a6c; --line:rgba(36,31,26,0.12);
+    --accent:#ff7a3d; --card:#fffdf8; --ok:#2e7d4f; --warn:#b8860b; --bad:#b3261e;
+    --bar-bg:#efe8d8;
+    --display:'Baloo 2','Zen Maru Gothic',system-ui,cursive;
+    --body:'Zen Maru Gothic',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.7;font-size:16px;text-wrap:pretty}
+  .wrap{max-width:min(1180px,94vw);margin:0 auto;padding:48px 0 80px}
+  h1{font-family:var(--display);font-weight:800;font-size:2rem;margin:0 0 8px;letter-spacing:-0.01em}
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:48px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+  h3{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:24px 0 10px}
+  h4{font-family:var(--display);font-weight:800;margin:0 0 10px;font-size:1.05rem}
+  a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+  .system-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:2px solid var(--ink);background:var(--card);font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .system-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-family:var(--display);font-weight:700;font-size:0.78rem;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+  .tag-ok{background:var(--ok);color:#fff} .tag-warn{background:var(--warn);color:#fff}
+  .tag-bad{background:var(--bad);color:#fff} .tag-accent{background:var(--accent);color:#fff}
+  .meta{color:var(--ink-soft);font-size:0.88rem}
+  .header-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+
+  /* popup mock frame 幅 560px 固定 */
+  .popup-frame{border:2px solid var(--ink);border-radius:14px;background:var(--card);padding:0;box-shadow:6px 7px 0 rgba(36,31,26,.08);width:560px;max-width:100%;max-height:600px;overflow:hidden;display:flex;flex-direction:column}
+  .popup-frame .p-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1.5px solid var(--ink);background:#fff}
+  .popup-frame .p-head .brand{font-family:var(--display);font-weight:800;letter-spacing:-.01em}
+  .popup-frame .p-head .brand small{color:var(--ink-soft);font-weight:500;font-size:0.7rem}
+  .popup-frame .p-head .gear{font-family:var(--display);font-weight:700;font-size:0.86rem;color:var(--ink-soft)}
+  .popup-body{flex:1;overflow-y:auto;padding:6px 8px 8px}
+
+  /* provider row(1 行モード・Z 案) */
+  .prow{display:grid;grid-template-columns:82px 1fr 30px 30px;gap:8px;align-items:center;padding:8px 6px;border-bottom:1px solid var(--line);min-height:52px}
+  .prow:last-child{border-bottom:0}
+  .prow.expanded{background:#fdfaf0}
+  .prow .pname{font-family:var(--display);font-weight:800;font-size:0.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prow .pname .stale-dot{color:var(--warn);font-family:var(--body);font-weight:400;font-size:0.72rem}
+  .prow .pwins{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .prow .pwins.n1{grid-template-columns:1fr}
+  .prow .pwins.n2{grid-template-columns:1fr 1fr}
+  .win{display:flex;flex-direction:column;gap:2px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .win .win-top{display:flex;justify-content:space-between;align-items:baseline;font-size:0.7rem;font-family:var(--display);font-weight:700;color:var(--ink-soft)}
+  .win .win-top .win-val{color:var(--ink);font-size:0.82rem;font-weight:800}
+  .win .win-track{height:6px;background:var(--bar-bg);border-radius:999px;overflow:hidden;border:1px solid var(--ink)}
+  .win .win-fill{height:100%;border-radius:999px}
+  .win .win-reset{font-size:0.62rem;color:var(--ink-soft);font-family:var(--body);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .win.is-lowest{border-color:var(--accent);background:#fff5ec}
+  .win.is-lowest .win-top{color:var(--accent)}
+  .icon-btn{width:26px;height:26px;border:1.2px solid var(--ink);border-radius:999px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:0.78rem;background:#fff;color:var(--ink);cursor:default}
+  .icon-btn.primary{background:var(--ink);color:#fff}
+
+  /* accordion (異常) */
+  .acc{border-top:1.5px solid var(--ink);background:#fdfaf0}
+  .acc-head{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:700;font-size:0.86rem;cursor:default}
+  .acc-head .caret{color:var(--ink-soft)}
+  .acc-body{padding:6px 8px 10px;border-top:1px dashed var(--line);background:#fff}
+  .abadge{display:inline-block;padding:1px 8px;border-radius:999px;font-family:var(--display);font-weight:700;font-size:0.72rem;border:1.5px solid var(--ink);background:#fff}
+  .abadge.warn{border-color:var(--warn);color:var(--warn)}
+  .abadge.tile{border-color:var(--ink-soft);color:var(--ink-soft)}
+  .arow{display:grid;grid-template-columns:82px 1fr auto;gap:8px;align-items:center;padding:8px 6px;border-bottom:1px solid var(--line);font-size:0.84rem}
+  .arow:last-child{border-bottom:0}
+  .arow .amsg{color:var(--ink-soft);font-size:0.78rem}
+  .arow .aacts{display:flex;gap:4px}
+  .btn{display:inline-block;font-family:var(--display);font-weight:700;font-size:0.74rem;padding:3px 10px;border:1.2px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);cursor:default;line-height:1.5}
+  .btn.primary{background:var(--ink);color:#fff}
+  .btn.accent{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn.danger{background:#fff;color:var(--bad);border-color:var(--bad)}
+  .btn.ghost{background:#fff;color:var(--ink-soft);border-color:var(--ink-soft)}
+
+  /* callout */
+  .callout{border:2px solid var(--warn);border-radius:12px;padding:12px 16px;background:#fffaf0;margin:12px 0;font-size:0.92rem}
+  .callout .lbl{font-family:var(--display);font-weight:700;color:var(--warn);font-size:0.82rem}
+  .callout.accent{border-color:var(--accent);background:#fff5ec}
+  .callout.accent .lbl{color:var(--accent)}
+
+  /* legend */
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:0.82rem;color:var(--ink-soft);align-items:center}
+  .legend .item{display:inline-flex;align-items:center;gap:6px}
+  .legend .swatch{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--ink)}
+  .swatch.ok{background:var(--ok)} .swatch.warn{background:var(--warn)} .swatch.bad{background:var(--bad)}
+
+  /* options full page mock */
+  .fullpage{background:#fff;border:2px solid var(--ink);border-radius:18px;box-shadow:6px 7px 0 rgba(36,31,26,.08);overflow:hidden}
+  .fullpage .fp-head{padding:14px 20px;border-bottom:1.5px solid var(--ink);display:flex;justify-content:space-between;align-items:center;background:var(--card)}
+  .fullpage .fp-head .brand{font-family:var(--display);font-weight:800;font-size:1.1rem}
+  .fp-body{display:grid;grid-template-columns:260px 1fr;min-height:600px}
+  @media (max-width:820px){ .fp-body{grid-template-columns:1fr} }
+  .fp-side{border-right:1.5px solid var(--ink);padding:14px;background:#fdfaf0;display:flex;flex-direction:column;gap:6px}
+  .fp-side h4{font-size:0.78rem;color:var(--ink-soft);margin:6px 0 2px}
+  .side-item{border:1.5px solid var(--ink);border-radius:10px;padding:8px 10px;background:#fff;display:flex;justify-content:space-between;align-items:center;font-size:0.86rem;cursor:default;gap:8px}
+  .side-item.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .side-item .side-name{font-family:var(--display);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .side-item .side-status{font-size:0.72rem;flex-shrink:0}
+  .side-item .side-drag{color:var(--ink-soft);font-size:0.8rem;cursor:grab;flex-shrink:0}
+  .side-item.selected .side-drag{color:#fff}
+  .side-new{border:1.5px dashed var(--accent);border-radius:10px;padding:8px 10px;text-align:center;color:var(--accent);font-family:var(--display);font-weight:700;background:#fff;font-size:0.86rem}
+  .fp-main{padding:20px 24px}
+
+  .form-row{display:grid;grid-template-columns:8em 1fr;gap:12px;align-items:center;margin:10px 0}
+  .form-row label{font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .form-row .input{border:1.5px solid var(--ink);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:var(--body);background:#fff;font-size:0.9rem}
+  .form-row .input.dim{color:var(--ink-soft)}
+  .form-hint{grid-column:2;font-size:0.74rem;color:var(--ink-soft);margin-top:-6px}
+
+  .section-block{border:1.5px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0;background:#fff}
+  .section-block h4{margin-top:0}
+  .diag-table{width:100%;border-collapse:collapse;font-size:0.85rem}
+  .diag-table th,.diag-table td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  .diag-table th{font-family:var(--display);font-weight:700;width:9em;color:var(--ink-soft);font-size:0.8rem}
+  .diag-table tr:last-child th,.diag-table tr:last-child td{border-bottom:0}
+
+  .btn-row{display:flex;gap:8px;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1.5px solid var(--line)}
+  .btn-row .btn-left,.btn-row .btn-right{display:flex;gap:8px}
+
+  /* detail 内の水平バー */
+  .dbar{display:grid;grid-template-columns:5em 1fr 3.4em 6em;gap:8px;align-items:center;margin:5px 0;font-size:0.82rem}
+  .dbar .dbar-label{font-family:var(--display);font-weight:700;color:var(--ink)}
+  .dbar .dbar-track{height:12px;background:var(--bar-bg);border-radius:999px;overflow:hidden;border:1.2px solid var(--ink)}
+  .dbar .dbar-fill{height:100%;border-radius:999px}
+  .dbar .dbar-value{text-align:right;font-family:var(--display);font-weight:800;font-size:0.9rem}
+  .dbar .dbar-reset{font-size:0.72rem;color:var(--ink-soft);text-align:right}
+  .dbar.is-lowest .dbar-label{color:var(--accent)}
+  .dbar.is-lowest .dbar-label::before{content:"▶ ";color:var(--accent)}
+
+  code{background:#fffdf8;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:0.86em;font-family:'Cascadia Code',Consolas,monospace}
+  .frame-caption{font-size:0.76rem;color:var(--ink-soft);text-align:center;margin-top:6px;font-family:var(--display);letter-spacing:.02em}
+
+  @media print{ body{background:#fff} .popup-frame,.fullpage{box-shadow:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header-row">
+    <span class="system-badge"><span class="dot"></span>対象: <b>many-ai-usage</b></span>
+    <span class="tag tag-accent">ビジュアル完成イメージ v3</span>
+    <span class="meta">v0.1.0-mvp · 2026-07-14</span>
+  </div>
+  <h1>ビジュアル完成イメージ v3(1 行 Z 案 + 560px 幅 + 異常アコーディオン)</h1>
+  <p class="meta">popup 幅 <b>560px</b>(Chrome/Firefox 拡張の最大 800px の実用スイートスポット)、1 プロバイダ = 1 行に <b>全 window ミニバー横並び</b>、順序は登録順で固定、異常は下部アコーディオンで畳む。</p>
+
+  <div class="legend">
+    <span class="item"><span class="swatch ok"></span>残量たっぷり (70%+)</span>
+    <span class="item"><span class="swatch warn"></span>そろそろ (30〜70%)</span>
+    <span class="item"><span class="swatch bad"></span>もうすぐ枯れる (30%未満)</span>
+    <span class="item"><span style="color:var(--accent);font-weight:700;font-family:var(--display)">▶</span> lowest window</span>
+    <span class="meta">※順序は登録順固定・自動ソートなし</span>
+  </div>
+
+  <!-- ============ 1. popup 一覧(1 行 Z 案・幅 560px) ============ -->
+  <h2>1. popup 一覧ビュー(10 プロバイダ登録の例)</h2>
+  <p class="meta">Claude / Codex / Copilot / Cursor / OpenCode / Grok / Gemini / DeepSeek / Ollama / LM Studio の 10 個を登録した状態。window 数はプロバイダで違う(5h+weekly / weekly のみ / monthly のみ 等)。</p>
+
+  <div class="popup-frame">
+    <div class="p-head">
+      <div class="brand">many-ai-usage <small>v0.1.0</small></div>
+      <div class="gear">⚙ options</div>
+    </div>
+
+    <div class="popup-body">
+
+      <!-- Claude: 5h(lowest 42%) + weekly + monthly -->
+      <div class="prow">
+        <div class="pname">Claude</div>
+        <div class="pwins">
+          <div class="win is-lowest">
+            <div class="win-top"><span>5h</span><span class="win-val">42%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:42%;background:var(--warn)"></div></div>
+            <div class="win-reset">→ 21:30</div>
+          </div>
+          <div class="win">
+            <div class="win-top"><span>wk</span><span class="win-val">70%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:70%;background:var(--warn)"></div></div>
+            <div class="win-reset">→ 日 24:00</div>
+          </div>
+          <div class="win">
+            <div class="win-top"><span>mo</span><span class="win-val">85%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:85%;background:var(--ok)"></div></div>
+            <div class="win-reset">→ 来月 1 日</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+      <!-- Codex: weekly のみ、stale -->
+      <div class="prow">
+        <div class="pname">Codex <span class="stale-dot">· stale</span></div>
+        <div class="pwins n1">
+          <div class="win is-lowest">
+            <div class="win-top"><span>weekly</span><span class="win-val">18%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:18%;background:var(--bad)"></div></div>
+            <div class="win-reset">→ 水 09:00</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+      <!-- Copilot: monthly のみ -->
+      <div class="prow">
+        <div class="pname">Copilot</div>
+        <div class="pwins n1">
+          <div class="win is-lowest">
+            <div class="win-top"><span>monthly</span><span class="win-val">60%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:60%;background:var(--warn)"></div></div>
+            <div class="win-reset">→ 来月 1 日</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+      <!-- Cursor: monthly のみ -->
+      <div class="prow">
+        <div class="pname">Cursor</div>
+        <div class="pwins n1">
+          <div class="win is-lowest">
+            <div class="win-top"><span>monthly</span><span class="win-val">78%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:78%;background:var(--ok)"></div></div>
+            <div class="win-reset">→ 来月 1 日</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+      <!-- OpenCode: 5h + weekly -->
+      <div class="prow">
+        <div class="pname">OpenCode</div>
+        <div class="pwins n2">
+          <div class="win is-lowest">
+            <div class="win-top"><span>5h</span><span class="win-val">25%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:25%;background:var(--bad)"></div></div>
+            <div class="win-reset">→ 4h 後</div>
+          </div>
+          <div class="win">
+            <div class="win-top"><span>weekly</span><span class="win-val">55%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:55%;background:var(--warn)"></div></div>
+            <div class="win-reset">→ 日 24:00</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+      <!-- DeepSeek: monthly のみ -->
+      <div class="prow">
+        <div class="pname">DeepSeek</div>
+        <div class="pwins n1">
+          <div class="win is-lowest">
+            <div class="win-top"><span>monthly</span><span class="win-val">92%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:92%;background:var(--ok)"></div></div>
+            <div class="win-reset">→ 来月 1 日</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+      <!-- Ollama: local(枠のみ表示型) -->
+      <div class="prow">
+        <div class="pname">Ollama</div>
+        <div class="pwins n1">
+          <div class="win">
+            <div class="win-top"><span>ローカル実行 · 上限なし</span><span class="win-val">—</span></div>
+            <div class="win-track"><div class="win-fill" style="width:100%;background:var(--ok)"></div></div>
+            <div class="win-reset">(表示のみ)</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+    </div>
+
+    <!-- 異常アコーディオン (閉じた状態) -->
+    <div class="acc">
+      <div class="acc-head">
+        <span>▼ 対処が必要 · <b style="color:var(--warn)">3 件</b></span>
+        <span class="caret">開く</span>
+      </div>
+    </div>
+
+  </div>
+  <div class="frame-caption">popup 幅 560px × 高さ最大 600px。上部 = 通常バー(登録順・位置固定)/ 下部 = 異常アコーディオン(閉)</div>
+
+  <!-- ============ 2. popup 展開状態(異常アコーディオンを開いた) ============ -->
+  <h2>2. popup: 異常アコーディオン展開 + プロバイダ行展開</h2>
+  <p class="meta">下部のアコーディオンを開くと needs_permission / tile カードが縦に並ぶ。各プロバイダ行の「▾」を押すと詳細(全 window + reset フル + confidence)が下に展開する。</p>
+
+  <div class="popup-frame">
+    <div class="p-head">
+      <div class="brand">many-ai-usage <small>v0.1.0</small></div>
+      <div class="gear">⚙ options</div>
+    </div>
+
+    <div class="popup-body">
+
+      <!-- Claude(展開) -->
+      <div class="prow expanded">
+        <div class="pname">Claude</div>
+        <div class="pwins">
+          <div class="win is-lowest">
+            <div class="win-top"><span>5h</span><span class="win-val">42%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:42%;background:var(--warn)"></div></div>
+            <div class="win-reset">→ 21:30</div>
+          </div>
+          <div class="win">
+            <div class="win-top"><span>wk</span><span class="win-val">70%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:70%;background:var(--warn)"></div></div>
+            <div class="win-reset">→ 日 24:00</div>
+          </div>
+          <div class="win">
+            <div class="win-top"><span>mo</span><span class="win-val">85%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:85%;background:var(--ok)"></div></div>
+            <div class="win-reset">→ 来月 1 日</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▴</span>
+      </div>
+      <!-- Claude 展開詳細 -->
+      <div style="padding:0 12px 12px;background:#fdfaf0;border-bottom:1px solid var(--line);font-size:0.78rem;color:var(--ink-soft)">
+        <div style="margin:6px 0"><b style="color:var(--ink)">confidence:</b> 5h 0.82 / wk 0.75 / mo 0.66 &nbsp; · &nbsp; <b style="color:var(--ink)">source:</b> dom &nbsp; · &nbsp; <b style="color:var(--ink)">取得:</b> 3 分前</div>
+        <div style="display:flex;gap:6px"><span class="btn ghost">↗ 対象ページを開く</span><span class="btn ghost">⚙ 設定を開く</span></div>
+      </div>
+
+      <!-- Codex -->
+      <div class="prow">
+        <div class="pname">Codex <span class="stale-dot">· stale</span></div>
+        <div class="pwins n1">
+          <div class="win is-lowest">
+            <div class="win-top"><span>weekly</span><span class="win-val">18%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:18%;background:var(--bad)"></div></div>
+            <div class="win-reset">→ 水 09:00</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+      <div class="prow">
+        <div class="pname">Copilot</div>
+        <div class="pwins n1">
+          <div class="win is-lowest">
+            <div class="win-top"><span>monthly</span><span class="win-val">60%</span></div>
+            <div class="win-track"><div class="win-fill" style="width:60%;background:var(--warn)"></div></div>
+            <div class="win-reset">→ 来月 1 日</div>
+          </div>
+        </div>
+        <span class="icon-btn primary">↻</span>
+        <span class="icon-btn">▾</span>
+      </div>
+
+    </div>
+
+    <!-- 異常アコーディオン (開いた状態) -->
+    <div class="acc">
+      <div class="acc-head">
+        <span>▴ 対処が必要 · <b style="color:var(--warn)">3 件</b></span>
+        <span class="caret">閉じる</span>
+      </div>
+      <div class="acc-body">
+
+        <!-- needs_permission: Grok -->
+        <div class="arow">
+          <div><span class="pname" style="font-size:0.86rem">Grok</span><br><span class="abadge warn">要許可</span></div>
+          <div class="amsg">host permission が拒否されています。許可すると自動解析が有効になります。</div>
+          <div class="aacts">
+            <span class="btn accent">許可を要求</span>
+            <span class="btn danger">削除</span>
+          </div>
+        </div>
+
+        <!-- needs_permission: Gemini -->
+        <div class="arow">
+          <div><span class="pname" style="font-size:0.86rem">Gemini</span><br><span class="abadge warn">要許可</span></div>
+          <div class="amsg">host permission が拒否されています。</div>
+          <div class="aacts">
+            <span class="btn accent">許可を要求</span>
+            <span class="btn danger">削除</span>
+          </div>
+        </div>
+
+        <!-- tile fallback: LM Studio -->
+        <div class="arow">
+          <div><span class="pname" style="font-size:0.86rem">LM Studio</span><br><span class="abadge tile">開くだけ</span></div>
+          <div class="amsg">自動解析で残量を拾えませんでした。<br>取得: 10 分前</div>
+          <div class="aacts">
+            <span class="btn ghost">↗ 開く</span>
+            <span class="btn">↻ 再解析</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+  <div class="frame-caption">Claude 行を展開 = confidence/source/取得時刻が下に展開 / 異常アコーディオン開 = needs_permission 2 件 + tile 1 件が並ぶ</div>
+
+  <!-- ============ 3. 状態遷移 ============ -->
+  <h2>3. 対処後の状態遷移</h2>
+  <div class="callout accent">
+    <span class="lbl">対処 → 通常バーへ「昇格」</span>
+    <ul style="margin:6px 0 0;padding-left:20px">
+      <li><b>needs_permission → 許可</b>: 上部の通常バー領域に登録順の位置で戻る(位置は最初から予約されている・場所は動かない)</li>
+      <li><b>needs_permission → 削除</b>: provider が消える。以降 popup にも options にも出ない</li>
+      <li><b>tile → 再解析で拾えた</b>: 上部の通常バー領域に登録順の位置で戻る</li>
+      <li><b>tile → 開いて閉じた</b>: 次回訪問時の user visit capture で自動的に snapshot が上書きされる</li>
+    </ul>
+    位置は「登録順で予約席」的な扱い。昇格しても場所は動かない。
+  </div>
+
+  <!-- ============ 4. options 統合画面(前バージョンから継承) ============ -->
+  <h2>4. options 統合画面(詳細 = 編集 = 新規登録 の 1 画面・v2 と同じ)</h2>
+  <p class="meta">左サイドバーで provider 切替 + ドラッグで並べ替え。右は編集フォーム + 実測値 + 診断。「+ 新規追加」で空フォーム状態。</p>
+
+  <div class="fullpage">
+    <div class="fp-head">
+      <div class="brand">many-ai-usage — 設定</div>
+      <div class="meta">v0.1.0</div>
+    </div>
+    <div class="fp-body">
+      <div class="fp-side">
+        <div class="side-new">+ 新規追加</div>
+        <h4>登録済み(ドラッグで並べ替え)</h4>
+        <div class="side-item selected"><span class="side-drag">☰</span><span class="side-name">Claude</span><span class="side-status">42%</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name">Codex</span><span class="side-status">18%</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name">Copilot</span><span class="side-status">60%</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name">Cursor</span><span class="side-status">78%</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name">OpenCode</span><span class="side-status">25%</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name" style="color:var(--warn)">Grok</span><span class="side-status" style="font-size:0.68rem;color:var(--warn)">要許可</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name" style="color:var(--warn)">Gemini</span><span class="side-status" style="font-size:0.68rem;color:var(--warn)">要許可</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name">DeepSeek</span><span class="side-status">92%</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name">Ollama</span><span class="side-status">—</span></div>
+        <div class="side-item"><span class="side-drag">☰</span><span class="side-name" style="color:var(--ink-soft)">LM Studio</span><span class="side-status" style="font-size:0.68rem;color:var(--ink-soft)">tile</span></div>
+      </div>
+
+      <div class="fp-main">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <h3 style="margin:0">Claude</h3>
+          <span class="abadge" style="border-color:var(--ok);color:var(--ok)">ok</span>
+        </div>
+        <div class="meta">最終取得: 3 分前 / lowest: 5h · あと 42%</div>
+
+        <div class="section-block">
+          <h4>現在の残量</h4>
+          <div class="dbar is-lowest">
+            <span class="dbar-label">5h</span>
+            <div class="dbar-track"><div class="dbar-fill" style="width:42%;background:var(--warn)"></div></div>
+            <span class="dbar-value">42%</span>
+            <span class="dbar-reset">→ 21:30</span>
+          </div>
+          <div class="dbar">
+            <span class="dbar-label">weekly</span>
+            <div class="dbar-track"><div class="dbar-fill" style="width:70%;background:var(--warn)"></div></div>
+            <span class="dbar-value">70%</span>
+            <span class="dbar-reset">→ 日 24:00</span>
+          </div>
+          <div class="dbar">
+            <span class="dbar-label">monthly</span>
+            <div class="dbar-track"><div class="dbar-fill" style="width:85%;background:var(--ok)"></div></div>
+            <span class="dbar-value">85%</span>
+            <span class="dbar-reset">→ 来月 1 日</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <span class="btn primary">↻ 手動再取得</span>
+            <span class="btn ghost">↗ 対象ページを開く</span>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <h4>設定</h4>
+          <div class="form-row"><label>表示名</label><div class="input">Claude</div></div>
+          <div class="form-row"><label>URL</label><div class="input">https://claude.ai/new#settings/usage</div></div>
+          <div class="form-hint">hash(<code>#</code>) 以降は URL match で無視。URL の origin を変えると host permission を再要求します</div>
+          <div class="form-row"><label>更新間隔</label><div class="input">15 分(3〜240)</div></div>
+          <div class="form-row"><label>モード</label><div class="input">auto(自動解析)</div></div>
+          <div class="form-hint">v0.1.0 は auto のみ。教える型・表示型は v0.2 で追加予定</div>
+        </div>
+
+        <div class="section-block">
+          <h4>診断</h4>
+          <table class="diag-table">
+            <tr><th>status</th><td><span class="abadge" style="border-color:var(--ok);color:var(--ok)">ok</span></td></tr>
+            <tr><th>source</th><td>dom(自動解析)</td></tr>
+            <tr><th>confidence</th><td>0.82(5h) / 0.75(weekly) / 0.66(monthly)</td></tr>
+            <tr><th>evidence</th><td><code>percentDetector: 42% near label "Weekly quota"</code></td></tr>
+            <tr><th>stale 閾値</th><td>更新間隔 × 2 = 30 分</td></tr>
+          </table>
+        </div>
+
+        <div class="btn-row">
+          <div class="btn-left"><span class="btn danger">削除</span></div>
+          <div class="btn-right">
+            <span class="btn ghost">変更を破棄</span>
+            <span class="btn primary">保存</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 5. plan への影響 ============ -->
+  <h2>5. plan へ反映が要る点(v3 まとめ)</h2>
+  <div class="callout accent">
+    <span class="lbl">plan §C6 / F2 差し戻し</span>
+    <ul style="margin:6px 0 0;padding-left:20px">
+      <li><b>popup 寸法</b>: 幅 <b>560px</b> × 高さ最大 <b>600px</b>(Chrome/Firefox の制限内)。§C6 に明記</li>
+      <li><b>popup 主表示は F2 決定を差し戻し</b>: 「lowest 1 metric」ではなく <b>全 window ミニバー横並び(1 プロバイダ 1 行)</b>。lowest は色 + ▶ + オレンジラベルで強調</li>
+      <li><b>順序</b>: 登録順で固定・自動ソートなし。ユーザーは options でドラッグ並べ替え(MVP に含めるかは要決定)</li>
+      <li><b>異常アコーディオン</b>: needs_permission / tile を popup 下部の折りたたみに集約。展開/閉が状態遷移で自動昇格</li>
+      <li><b>各プロバイダ行の展開</b>: 「▾」で confidence / source / 取得時刻を下に表示 + [開く][設定] ボタン</li>
+      <li><b>URL 変更時の permission 再要求</b>(options 統合画面)</li>
+      <li><b>options 統合画面の存在</b>: §C5 と §C6 の分離を解消して統合 1 画面に</li>
+    </ul>
+  </div>
+
+  <p class="meta" style="margin-top:30px">本資料: <code>docs/local/design_v0.1.0-mvp-visual_2026-07-14.html</code>(v3 で上書き) ／ 対で見る: <code>mockup_v0.1.0-mvp_2026-07-14.html</code>(wireframe) ／ 元 plan: <code>plan_v0.1.0-mvp.md</code></p>
+
+</div>
+</body>
+</html>

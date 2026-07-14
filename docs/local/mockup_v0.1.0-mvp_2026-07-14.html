@@ -1,0 +1,507 @@
+<!doctype html>
+<!--docsweep-meta
+type: mockup
+status: planned
+tags: [mockup, many-ai-usage, mvp]
+owner: ishizakahiroshi
+related: [plan_v0.1.0-mvp.md, reference_study-synthesis.md]
+last_reviewed: 2026-07-14
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>many-ai-usage v0.1.0 MVP UI モック — 2026-07-14</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f3ea; --ink:#241f1a; --ink-soft:#837a6c; --line:rgba(36,31,26,0.12);
+    --accent:#ff7a3d; --card:#fffdf8; --ok:#2e7d4f; --warn:#b8860b; --bad:#b3261e;
+    --display:'Baloo 2','Zen Maru Gothic',system-ui,cursive;
+    --body:'Zen Maru Gothic',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.7;font-size:16px;text-wrap:pretty}
+  .wrap{max-width:min(1180px,94vw);margin:0 auto;padding:48px 0 80px}
+  h1{font-family:var(--display);font-weight:800;font-size:2rem;margin:0 0 8px;letter-spacing:-0.01em}
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:48px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+  h3{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:28px 0 10px}
+  a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+  .card{background:var(--card);border:2px solid var(--ink);border-radius:18px;padding:22px 24px;box-shadow:4px 5px 0 var(--line);margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);font-size:0.94rem;vertical-align:top}
+  th{background:#fffdf8;font-family:var(--display);font-weight:700}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-family:var(--display);font-weight:700;font-size:0.78rem;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+  .tag-ok{background:var(--ok);color:#fff} .tag-warn{background:var(--warn);color:#fff}
+  .tag-bad{background:var(--bad);color:#fff} .tag-accent{background:var(--accent);color:#fff}
+  .system-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:2px solid var(--ink);background:var(--card);font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .system-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .meta{color:var(--ink-soft);font-size:0.88rem}
+  .header-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+
+  /* wireframe primitives — 色なし・線のみ */
+  .wf{border:2px solid var(--ink);border-radius:14px;background:#fff;padding:0;margin:18px 0;overflow:hidden}
+  .wf-popup{max-width:400px}
+  .wf-frame{padding:16px;display:flex;flex-direction:column;gap:10px;min-height:auto}
+  .wf-header{border:1.5px dashed var(--ink);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:700;font-size:0.92rem}
+  .wf-block{border:1.5px dashed var(--ink-soft);border-radius:10px;padding:12px 14px;color:var(--ink);font-family:var(--body)}
+  .wf-block.dim{color:var(--ink-soft);font-family:var(--display);text-align:center}
+  .wf-row{display:flex;gap:10px}
+  .wf-row > *{flex:1}
+  .wf-placeholder{display:flex;align-items:center;justify-content:center;min-height:60px;border:1.5px dashed var(--ink-soft);border-radius:10px;color:var(--ink-soft);font-family:var(--display);font-weight:700;letter-spacing:0.03em;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(36,31,26,0.04) 8px,rgba(36,31,26,0.04) 16px)}
+  .wf-caption{font-size:0.84rem;color:var(--ink-soft);padding:8px 16px;border-top:1px solid var(--line);background:#fffdf8}
+
+  /* provider card in popup */
+  .pcard{border:1.5px solid var(--ink);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;background:#fff}
+  .pcard .p-top{display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:700}
+  .pcard .p-main{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display)}
+  .pcard .p-main .value{font-size:1.4rem;font-weight:800}
+  .pcard .p-meta{font-size:0.82rem;color:var(--ink-soft);display:flex;justify-content:space-between}
+  .pcard .p-actions{display:flex;justify-content:space-between;gap:8px;font-size:0.82rem}
+  .pcard .p-actions .btn{border:1.5px solid var(--ink);border-radius:999px;padding:2px 10px;font-family:var(--display);font-weight:700}
+  .pcard .p-fold{border-top:1px dashed var(--ink-soft);padding-top:8px;font-size:0.82rem;color:var(--ink-soft);font-family:var(--display)}
+  .pcard .tag-mini{font-size:0.7rem;padding:1px 7px;border-radius:999px;border:1.5px solid var(--ink);font-family:var(--display);font-weight:700;background:#fff}
+
+  /* form primitives for options */
+  .form-row{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+  .form-row label{font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .form-row .input{border:1.5px solid var(--ink);border-radius:8px;padding:8px 10px;color:var(--ink-soft);font-family:var(--body);background:#fff}
+  .form-row .hint{font-size:0.78rem;color:var(--ink-soft)}
+  .btn-primary{display:inline-block;border:2px solid var(--ink);border-radius:999px;padding:6px 16px;font-family:var(--display);font-weight:700;background:#fff;box-shadow:3px 3px 0 var(--ink)}
+
+  .screen-list a{font-family:var(--display);font-weight:700}
+  ul.checklist{list-style:none;padding-left:0}
+  ul.checklist li{padding:6px 0;border-bottom:1px dashed var(--line)}
+  ul.checklist li::before{content:"☐";margin-right:10px;font-family:var(--display)}
+  .callout{border:2px solid var(--warn);border-radius:12px;padding:12px 16px;background:#fffaf0;margin:12px 0;font-size:0.92rem}
+  .callout .lbl{font-family:var(--display);font-weight:700;color:var(--warn);font-size:0.82rem}
+  @media print{ body{background:#fff} .card{box-shadow:none} .btn-primary{box-shadow:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header-row">
+    <span class="system-badge"><span class="dot"></span>対象: <b>many-ai-usage</b></span>
+    <span class="tag tag-accent">草案</span>
+    <span class="meta">v0.1.0-mvp · 2026-07-14</span>
+  </div>
+  <h1>many-ai-usage v0.1.0 MVP UI モック</h1>
+  <p class="meta">plan_v0.1.0-mvp.md の §C5〜C7 に対応する 5 画面の wireframe。実装前の認識合わせ用。配色・アイコンは意図的に持たず、線と placeholder のみで構造を示す。</p>
+
+  <div class="callout">
+    <span class="lbl">スコープ確認</span><br>
+    このモックには MVP に含む機能のみ描いています。教える型(user-taught) / background refresh / ダークモードは v0.2 以降で外出し。
+  </div>
+
+  <h2>画面リスト</h2>
+  <table class="screen-list">
+    <thead><tr><th style="width:5em">ID</th><th style="width:16em">画面名</th><th>概要</th></tr></thead>
+    <tbody>
+      <tr><td>S-01</td><td><a href="#s-01">popup 一次ビュー(通常)</a></td><td>登録済みプロバイダの現在値を一覧。lowest remaining を主表示、詳細は折りたたみ</td></tr>
+      <tr><td>S-02</td><td><a href="#s-02">popup(tile fallback)</a></td><td>自動解析で拾えない URL を「開くリンク付きカード」で残す(favicon あり/なし 2 バリエーション)</td></tr>
+      <tr><td>S-03</td><td><a href="#s-03">popup(needs_permission)</a></td><td>host permission 拒否時。「permission 要求」「削除」の 2 ボタン</td></tr>
+      <tr><td>S-04</td><td><a href="#s-04">options: 登録 UI</a></td><td>URL・表示名・更新間隔を入力。サンプル 2 件が登録済み雛形で並ぶ</td></tr>
+      <tr><td>S-05</td><td><a href="#s-05">options: 詳細ビュー</a></td><td>全 metric 展開 + 診断(状態 / source / confidence / evidence)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>画面遷移図</h2>
+  <div class="card">
+<pre style="font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.5;margin:0;overflow-x:auto">
+[新規インストール]
+        │
+        ▼
+   S-04 登録 UI (サンプル 2 件が permission 未許可で並ぶ)
+        │
+        ├─ permission 要求 ─ 許可 ─▶ [対象ページ訪問] ─ content script 自動解析 ─▶ S-01 popup 通常
+        │
+        └─ permission 拒否 ─────────────────────────────────▶ S-03 popup needs_permission
+                                                                     │
+                                                                     ├─ permission 要求 ─ 許可 ─▶ S-01
+                                                                     └─ 削除 ─▶ (provider 削除)
+
+S-01 popup 通常
+   ├─ card クリック ─▶ S-05 詳細ビュー
+   ├─ 「開くリンク」 ─▶ [対象ページ] (再訪 → snapshot 更新)
+   ├─ 「手動再取得」 ─▶ [同ページ tab に message 送信 → content script 再解析]
+   └─ 自動解析で拾えない URL ─▶ S-02 tile fallback として並ぶ
+
+S-02 tile
+   ├─ 「開くリンク」 ─▶ [対象ページ] (訪問後に自動解析で拾えたら S-01 の card に昇格)
+   └─ 「再解析」 ─▶ [対象ページ tab を開いて解析リトライ]
+</pre>
+  </div>
+
+  <!-- ============ S-01 popup 一次ビュー(通常) ============ -->
+  <h2 id="s-01">S-01 popup 一次ビュー(通常)</h2>
+  <p class="meta">幅想定 400px。プロバイダ card を縦に並べ、主表示は lowest remaining の 1 metric(F2 決定)。折りたたみで複数 window。</p>
+
+  <div class="wf wf-popup">
+    <div class="wf-frame">
+      <div class="wf-header">
+        <span>many-ai-usage</span>
+        <span>[⚙ options]</span>
+      </div>
+
+      <!-- provider card 1: Claude -->
+      <div class="pcard">
+        <div class="p-top">
+          <span>[プロバイダ名: Claude]</span>
+          <span>
+            <span class="tag-mini">heuristic</span>
+          </span>
+        </div>
+        <div class="p-main">
+          <span class="value">[値: 42%]</span>
+          <span>[window: 5h remaining]</span>
+        </div>
+        <div class="p-meta">
+          <span>reset: [約 2 時間後 · 21:30]</span>
+          <span>取得: [3 分前]</span>
+        </div>
+        <div class="p-actions">
+          <span>[▾ 他の window(weekly / monthly)]</span>
+          <span class="btn">↻ 再取得</span>
+        </div>
+      </div>
+
+      <!-- provider card 2: Codex (with stale) -->
+      <div class="pcard">
+        <div class="p-top">
+          <span>[プロバイダ名: Codex]</span>
+          <span>
+            <span class="tag-mini">heuristic</span>
+            <span class="tag-mini">stale</span>
+          </span>
+        </div>
+        <div class="p-main">
+          <span class="value">[値: 78%]</span>
+          <span>[window: weekly remaining]</span>
+        </div>
+        <div class="p-meta">
+          <span>reset: [水曜 09:00]</span>
+          <span>取得: [42 分前]</span>
+        </div>
+        <div class="p-actions">
+          <span>[▾ 他の window]</span>
+          <span class="btn">↻ 再取得</span>
+        </div>
+      </div>
+
+      <!-- provider card 3: 折りたたみ展開状態 -->
+      <div class="pcard">
+        <div class="p-top">
+          <span>[プロバイダ名: Example AI]</span>
+          <span><span class="tag-mini">heuristic</span></span>
+        </div>
+        <div class="p-main">
+          <span class="value">[値: 15%]</span>
+          <span>[window: monthly remaining]</span>
+        </div>
+        <div class="p-meta">
+          <span>reset: [来月 1 日 00:00]</span>
+          <span>取得: [1 分前]</span>
+        </div>
+        <div class="p-actions">
+          <span>[▴ 折りたたむ]</span>
+          <span class="btn">↻ 再取得</span>
+        </div>
+        <div class="p-fold">
+          ├ [window: 5h remaining] [値: 90%] [reset: 4 時間後]<br>
+          └ [window: weekly remaining] [値: 60%] [reset: 日曜 24:00]
+        </div>
+      </div>
+
+    </div>
+    <div class="wf-caption">主表示は lowest remaining の 1 metric。他 window は「▾」で折りたたみから展開。stale は取得から refreshInterval × 2 経過で表示。</div>
+  </div>
+
+  <h3>状態一覧</h3>
+  <table>
+    <thead><tr><th style="width:12em">状態</th><th>表示内容</th><th>遷移先</th></tr></thead>
+    <tbody>
+      <tr><td>初期表示(データあり)</td><td>全プロバイダ card 縦積み。lowest remaining metric を主表示</td><td>card クリック → S-05 / 開くリンク → 対象ページ</td></tr>
+      <tr><td>空(全プロバイダ未取得)</td><td>「まだデータがありません。対象ページを開くか登録してください」+ [options を開く] ボタン</td><td>options → S-04</td></tr>
+      <tr><td>stale(取得から N 分経過)</td><td>card 右上に <code>stale</code> タグ、取得時刻を赤系テキスト</td><td>手動再取得ボタン → 再解析</td></tr>
+      <tr><td>手動再取得中</td><td>該当 card に spinner + 「再取得中…」ラベル。他 card は通常</td><td>成功: 通常状態 / 失敗: error 状態</td></tr>
+      <tr><td>error</td><td>該当 card に <code>error</code> タグ + 原因ラベル(例: <code>tab closed during refresh</code>)</td><td>次の user visit で自動回復</td></tr>
+      <tr><td>tile 混在</td><td>自動解析で拾えない provider は S-02 の tile card として同じ popup 内に並ぶ</td><td>S-02 参照</td></tr>
+      <tr><td>needs_permission 混在</td><td>permission 拒否の provider は S-03 の card として同じ popup 内に並ぶ</td><td>S-03 参照</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============ S-02 popup(tile fallback) ============ -->
+  <h2 id="s-02">S-02 popup(tile fallback 状態)</h2>
+  <p class="meta">自動解析の候補ゼロ or confidence &lt; 0.6 で tile 化(G1 決定)。favicon は host permission がある host のみローカル取得で表示、無ければ非表示(G2 決定)。</p>
+
+  <div class="wf wf-popup">
+    <div class="wf-frame">
+      <div class="wf-header">
+        <span>many-ai-usage</span>
+        <span>[⚙ options]</span>
+      </div>
+
+      <!-- tile card A: favicon あり -->
+      <div class="pcard">
+        <div class="p-top">
+          <span>[favicon 16×16] [タイトル: 表示名]</span>
+          <span><span class="tag-mini">page_only</span></span>
+        </div>
+        <div class="p-meta">
+          <span>取得: [10 分前]</span>
+        </div>
+        <div class="p-actions">
+          <span>[↗ ページを開く]</span>
+          <span class="btn">↻ 再解析</span>
+        </div>
+      </div>
+
+      <!-- tile card B: favicon なし(host permission なし) -->
+      <div class="pcard">
+        <div class="p-top">
+          <span>[タイトル: 表示名]</span>
+          <span><span class="tag-mini">page_only</span></span>
+        </div>
+        <div class="p-meta">
+          <span>取得: [未取得]</span>
+        </div>
+        <div class="p-actions">
+          <span>[↗ ページを開く]</span>
+          <span class="btn">↻ 再解析</span>
+        </div>
+      </div>
+
+    </div>
+    <div class="wf-caption">tile card は 4 要素(タイトル / 開くリンク / 最終取得時刻 / 再解析ボタン)のみ。favicon 有無で 2 バリエーション。</div>
+  </div>
+
+  <h3>状態一覧</h3>
+  <table>
+    <thead><tr><th style="width:12em">状態</th><th>表示内容</th><th>遷移先</th></tr></thead>
+    <tbody>
+      <tr><td>初期(favicon あり)</td><td>favicon + タイトル + 取得時刻 + [開く][再解析]</td><td>開く → 対象ページ / 再解析 → タブを開いて解析</td></tr>
+      <tr><td>初期(favicon なし)</td><td>タイトルのみ + 取得時刻 + [開く][再解析]</td><td>同上</td></tr>
+      <tr><td>再解析中</td><td>再解析ボタンが spinner + 「再解析中…」</td><td>成功: S-01 の provider card に昇格 / 失敗: tile 継続</td></tr>
+      <tr><td>再解析後も拾えない</td><td>tile 状態を維持。取得時刻のみ更新</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============ S-03 popup(needs_permission) ============ -->
+  <h2 id="s-03">S-03 popup(needs_permission 状態)</h2>
+  <p class="meta">host permission 拒否の provider(E1/I4 決定)。自動削除せず、「permission 要求」「削除」の 2 ボタンをユーザー操作で解決させる。</p>
+
+  <div class="wf wf-popup">
+    <div class="wf-frame">
+      <div class="wf-header">
+        <span>many-ai-usage</span>
+        <span>[⚙ options]</span>
+      </div>
+
+      <!-- needs_permission card -->
+      <div class="pcard">
+        <div class="p-top">
+          <span>[プロバイダ名: Claude]</span>
+          <span><span class="tag-mini">needs_permission</span></span>
+        </div>
+        <div class="wf-block dim">host permission が必要です<br><span style="font-family:var(--body);font-weight:400;font-size:0.82rem;color:var(--ink-soft)">対象ページ(claude.ai)を読み取る許可を出してください</span></div>
+        <div class="p-actions">
+          <span class="btn">許可を要求</span>
+          <span class="btn">削除</span>
+        </div>
+      </div>
+
+      <!-- ほかの通常 card は S-01 と同じ -->
+      <div class="pcard" style="opacity:.6">
+        <div class="p-top">
+          <span>[通常の provider card(参考)]</span>
+          <span><span class="tag-mini">heuristic</span></span>
+        </div>
+        <div class="p-main"><span class="value">[値]</span><span>[window]</span></div>
+      </div>
+
+    </div>
+    <div class="wf-caption">同じ popup 内で needs_permission カードと通常カードが混在する想定。needs_permission は主表示 metric を持たず、代わりに説明文と 2 ボタン。</div>
+  </div>
+
+  <h3>状態一覧</h3>
+  <table>
+    <thead><tr><th style="width:12em">状態</th><th>表示内容</th><th>遷移先</th></tr></thead>
+    <tbody>
+      <tr><td>拒否直後</td><td>needs_permission カード + 説明文 + [許可を要求][削除]</td><td>許可要求 → chrome.permissions.request / 削除 → 削除確認</td></tr>
+      <tr><td>許可要求中</td><td>[許可を要求] ボタンが loading。ブラウザネイティブの許可ダイアログが上に載る</td><td>許可 → S-01 通常 / 拒否 → needs_permission 継続</td></tr>
+      <tr><td>削除確認</td><td>[削除] ボタン押下で「本当に削除しますか?」の確認 UI</td><td>削除 → provider 消去 / キャンセル → needs_permission 継続</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============ S-04 options: 登録 UI ============ -->
+  <h2 id="s-04">S-04 options / full page(登録 UI)</h2>
+  <p class="meta">「URL を登録するだけ」の入口。登録直後に該当 host の optional_host_permission を理由付きで要求する。</p>
+
+  <div class="wf">
+    <div class="wf-frame" style="max-width:820px">
+      <div class="wf-header">
+        <span>many-ai-usage — options</span>
+        <span>v0.1.0</span>
+      </div>
+
+      <div class="wf-block">
+        <h3 style="margin:0 0 8px">プロバイダ登録</h3>
+        <div class="form-row">
+          <label>URL(必須)</label>
+          <div class="input">https://example.com/account/usage</div>
+          <div class="hint">対象ページの URL。hash(#) は自動で無視されます。</div>
+        </div>
+        <div class="form-row">
+          <label>表示名(必須)</label>
+          <div class="input">Example AI</div>
+        </div>
+        <div class="form-row">
+          <label>更新間隔</label>
+          <div class="input">15 分(3〜240)</div>
+        </div>
+        <div class="form-row">
+          <label>モード</label>
+          <div class="input">auto (v0.1.0 は auto のみ)</div>
+        </div>
+        <div style="margin-top:12px">
+          <span class="btn-primary">登録して permission を要求</span>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:12px">
+        <span class="lbl">なぜ host permission が必要か</span><br>
+        登録した URL のページを読み取って自動解析するために、そのドメイン単位の閲覧許可が必要です。Cookie や認証トークンは<b>保存・送信しません</b>。読み取り専用です。
+      </div>
+
+      <div class="wf-block">
+        <h3 style="margin:0 0 8px">登録済みプロバイダ</h3>
+        <table>
+          <thead><tr><th>表示名</th><th>URL(origin+path)</th><th>状態</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Claude</td>
+              <td><code>claude.ai/new</code></td>
+              <td><span class="tag-mini">needs_permission</span></td>
+              <td>[許可を要求] [詳細] [削除]</td>
+            </tr>
+            <tr>
+              <td>Codex</td>
+              <td><code>chatgpt.com/codex/cloud/settings/analytics</code></td>
+              <td><span class="tag-mini">needs_permission</span></td>
+              <td>[許可を要求] [詳細] [削除]</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+    <div class="wf-caption">サンプル 2 件は初回インストール時に登録済みで並ぶ(permission 未許可バッジ付き)。ユーザーは即許可要求 or 削除できる。</div>
+  </div>
+
+  <h3>状態一覧</h3>
+  <table>
+    <thead><tr><th style="width:12em">状態</th><th>表示内容</th><th>遷移先</th></tr></thead>
+    <tbody>
+      <tr><td>初期(サンプル 2 件)</td><td>Claude / Codex が needs_permission で並ぶ。フォームは空</td><td>—</td></tr>
+      <tr><td>入力中</td><td>URL を打つと更新間隔・モードが表示</td><td>—</td></tr>
+      <tr><td>送信中(permission 要求)</td><td>[登録] ボタン loading + ブラウザ許可ダイアログ</td><td>許可 → 一覧に <code>ok</code> で並ぶ / 拒否 → <code>needs_permission</code> で並ぶ</td></tr>
+      <tr><td>URL 重複エラー</td><td>「同じ origin+path が既に登録されています」赤字</td><td>—</td></tr>
+      <tr><td>バリデーションエラー</td><td>URL 形式・更新間隔範囲外の赤字ラベル</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============ S-05 options: 詳細ビュー ============ -->
+  <h2 id="s-05">S-05 options / full page(詳細ビュー)</h2>
+  <p class="meta">プロバイダ 1 件を選択して全 metric を展開 + 診断(状態 / source / confidence / evidence)。</p>
+
+  <div class="wf">
+    <div class="wf-frame" style="max-width:820px">
+      <div class="wf-header">
+        <span>← 一覧に戻る</span>
+        <span>[プロバイダ名: Claude] 詳細</span>
+      </div>
+
+      <div class="wf-block">
+        <h3 style="margin:0 0 8px">metrics</h3>
+        <table>
+          <thead>
+            <tr><th>label</th><th>window</th><th>値</th><th>total</th><th>reset</th><th>取得</th><th>source</th><th>confidence</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>5h remaining</td><td>5h</td><td>[42%]</td><td>100</td><td>[21:30]</td><td>[3 分前]</td>
+              <td><span class="tag-mini">dom</span></td><td>[0.82]</td>
+            </tr>
+            <tr>
+              <td>weekly remaining</td><td>weekly</td><td>[70%]</td><td>100</td><td>[日曜 24:00]</td><td>[3 分前]</td>
+              <td><span class="tag-mini">dom</span></td><td>[0.75]</td>
+            </tr>
+            <tr>
+              <td>monthly remaining</td><td>monthly</td><td>[85%]</td><td>100</td><td>[来月 1 日 00:00]</td><td>[3 分前]</td>
+              <td><span class="tag-mini">dom</span></td><td>[0.66]</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-block">
+        <h3 style="margin:0 0 8px">診断</h3>
+        <table>
+          <thead><tr><th>項目</th><th>値</th></tr></thead>
+          <tbody>
+            <tr><td>status</td><td><span class="tag-mini">ok</span> (enum: never_seen / ok / warning / error / stale / needs_teaching / needs_permission)</td></tr>
+            <tr><td>pageBinding</td><td>bound</td></tr>
+            <tr><td>lastSuccessAt</td><td>[3 分前]</td></tr>
+            <tr><td>lastFailureReason</td><td>—</td></tr>
+            <tr><td>evidence(直近)</td><td>percentDetector: matched <code>42% remaining</code> near label <code>Weekly quota</code>; progressDetector: <code>role=progressbar</code> found</td></tr>
+            <tr><td>登録 URL</td><td><code>https://claude.ai/new</code>(hash 無視で match)</td></tr>
+            <tr><td>更新間隔</td><td>15 分 / stale 閾値: 30 分</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:8px">
+        <span class="btn-primary">↻ 手動再取得</span>
+        <span class="btn-primary" style="background:#fff">削除</span>
+      </div>
+
+    </div>
+    <div class="wf-caption">全 metric を横に並記し、複数 window(5h / weekly / monthly)を隠さない(synthesis §6 準拠)。診断は evidence をテキストで可視化。</div>
+  </div>
+
+  <h3>状態一覧</h3>
+  <table>
+    <thead><tr><th style="width:14em">状態</th><th>表示内容</th><th>遷移先</th></tr></thead>
+    <tbody>
+      <tr><td>ok(通常)</td><td>metrics + 診断 + [再取得][削除]</td><td>再取得 → 更新 / 削除 → 一覧へ</td></tr>
+      <tr><td>stale</td><td>診断の status に <code>stale</code>、metrics の取得時刻を赤系</td><td>—</td></tr>
+      <tr><td>error</td><td>診断の status に <code>error</code> + lastFailureReason、metrics は前回値のまま</td><td>次の user visit で自動回復</td></tr>
+      <tr><td>needs_permission</td><td>metrics 非表示。診断に「permission 未許可」+ [許可を要求]</td><td>許可 → ok / 削除 → 一覧へ</td></tr>
+      <tr><td>page_only(表示型)</td><td>metrics 非表示。診断に「自動解析で拾えていません」+ 開くリンク</td><td>再解析で拾えれば ok に昇格</td></tr>
+      <tr><td>never_seen</td><td>metrics 非表示。「まだ対象ページを開いていません」+ [ページを開く]</td><td>訪問 → ok</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============ 未決定事項 ============ -->
+  <h2>未決定事項</h2>
+  <ul class="checklist">
+    <li>popup の最大高さ(プロバイダが増えた時にスクロールさせるか、上限で切り上げるか)</li>
+    <li>reset 表記の統一(絶対時刻 <code>21:30</code> と相対 <code>2 時間後</code> をどう切り替えるか。同時併記か)</li>
+    <li>capturedAt の粒度(「3 分前」相対表記 vs 「00:31」絶対表記の使い分け)</li>
+    <li>手動再取得ボタンの loading 中の表現(spinner / 「再取得中…」/ ボタン無効化)</li>
+    <li>options の詳細ビューでの複数プロバイダ切替 UI(左サイドバー / タブ / 単発ページ)</li>
+    <li>evidence 表示の粒度(diag 用の短いラベル / detector 名称 / セレクタ含む)</li>
+    <li>削除の確認 UI(モーダル / インライン / undo 付き)</li>
+    <li>popup の空状態(全プロバイダ未取得時)の「はじめに読む案内」の文面</li>
+    <li>tile card に URL の表示を出すかどうか(favicon+タイトルで足りるか)</li>
+    <li>options ヘッダ左「← 一覧に戻る」と popup の [⚙ options] の相互往復(popup を閉じてから options か、chrome.tabs で開くか)</li>
+  </ul>
+
+</div>
+</body>
+</html>
