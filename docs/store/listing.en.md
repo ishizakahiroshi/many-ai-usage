@@ -35,8 +35,10 @@ Suggested category: Productivity
 
 ## Screenshot ideas
 
-- Popup showing two taught service values
-- Track this element highlight with the value preview tooltip
-- Re-teach needed card and the options page taught metric list
+- `screenshot-dashboard.png`: dashboard with two taught provider values
+- `screenshot-picker.png`: Track this element highlight with the value preview tooltip
+- `screenshot-settings.png`: Re-teach needed card and the options page taught metric list
+
+These images are synthetic-data screenshots generated from `docs/local/design_teach-mode-store-screens_2026-07-14.html`. They contain no real service UI, logos, or account information.
 
 Privacy policy: `docs/privacy-policy.html`

@@ -46,7 +46,7 @@ due: 2026-07-21
 | C5 options 統合画面 | partial done | 「**Track element**」ボタン追加(picker mode を起動して選択済ページを開く)。Provider settings に「教えた要素の label + selector + 最終読み取り値」表示追加 |
 | C6 popup UI | partial done | 変更なし(metric 表示方式は same、backing の source が taught に変わるだけ) |
 | C7 tile fallback | partial done | 変更なし。picker が拾えない or ユーザーが「これは tile でいい」と選んだ場合の受け皿 |
-| C8 リリース準備 | partial done | privacy/listing/submission notes、検証・パッケージ script、タグ駆動 GHA を追加。ストア提出と実スクショは外部操作として残る |
+| C8 リリース準備 | partial done | privacy/listing/submission notes、検証・パッケージ script、タグ駆動 GHA、合成 HTML 由来スクショを追加。ストア提出は外部操作として残る |
 
 実行順序: **C3.5(teach-mode 実装) → C4 分岐追加 → C5 UI 追加 → 実機確認 → 残り(C7 / C8)**
 

@@ -34,5 +34,6 @@ last_reviewed: 2026-07-14
 ## 申し送り
 
 - 2026-07-14: GitHub Release 用のタグ駆動 workflow を追加。タグ push は未実施。
+- 2026-07-14: `docs/local/design_teach-mode-store-screens_2026-07-14.html` から合成データの 1280×800 スクリーンショット 3 枚を生成。
 - 2026-07-14: Chrome Web Store / AMO への外部提出は、アカウント認証と人手確認が必要なため未実施。
 - 2026-07-14: repo-consistency は release registry に本リポジトリの行が無いため、台帳照合待ち。

@@ -35,8 +35,10 @@ many-ai-usage は、登録した利用状況ページからユーザーが選ん
 
 ## スクリーンショット案
 
-- 2 つの登録済みサービスの利用値が並ぶ popup
-- Track this element のハイライトと候補値ツールチップ
-- Re-teach needed カードと options の taught metric 一覧
+- `screenshot-dashboard.png`: 2 件の登録済みプロバイダーの利用値が並ぶ dashboard
+- `screenshot-picker.png`: Track this element のハイライトと候補値ツールチップ
+- `screenshot-settings.png`: Re-teach needed カードと options の taught metric 一覧
+
+画像は `docs/local/design_teach-mode-store-screens_2026-07-14.html` から生成した合成データのスクリーンショットです。実サービスの画面、ロゴ、アカウント情報は含みません。
 
 Privacy policy: `docs/privacy-policy.html`
