@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<!--docsweep-meta
+type: review-sheet
+status: planned
+tags: [review-sheet, teach-mode-ux, picker]
+owner: ishizakahiroshi
+related: [plan_teach-multi-metric-continuous.md, plan_try-samples-onboarding.md]
+last_reviewed: 2026-07-16
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>teach-mode UX 改修 判断シート — 検討シート</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1f2733; --sub:#5b6675; --line:#e2e6ec;
+    --accent:#2563eb; --accent-soft:#eaf1ff;
+    --ok:#1a7f4b; --ok-soft:#e7f5ee; --warn:#b06a00;
+    --todo:#b4232a; --todo-soft:#fdeced; --rec:#0e7c66; --rec-soft:#e3f6f1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;
+    line-height:1.75;font-size:15px}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 90px}
+  header.top{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;
+    border-radius:14px;padding:24px 26px;margin-bottom:22px;box-shadow:0 6px 22px rgba(37,99,235,.18)}
+  header.top h1{margin:0 0 6px;font-size:22px;letter-spacing:.02em}
+  header.top p{margin:0;opacity:.92;font-size:13.5px}
+  .meta{margin-top:12px;font-size:12.5px;opacity:.85}
+  h2{font-size:18px;margin:34px 0 12px;padding-left:11px;border-left:5px solid var(--accent)}
+  h3{font-size:15.5px;margin:22px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.03)}
+  p{margin:8px 0}
+  code{background:#eef1f5;border-radius:5px;padding:1px 6px;font-size:13px;
+    font-family:"Cascadia Code",Consolas,monospace}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 0}
+  .tag{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;
+    padding:2px 11px;line-height:1.6}
+  .tag.done{background:var(--ok-soft);color:var(--ok)}
+  .tag.todo{background:var(--todo-soft);color:var(--todo)}
+  .tag.rec{background:var(--rec-soft);color:var(--rec)}
+  .tag.p1{background:#efe7fb;color:#6b3fb8}
+  .tag.p2{background:#e6f4ea;color:#2f7d46}
+  .tag.p3{background:#fde9e7;color:#b4443a}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f0f3f8;font-weight:600}
+  .arch{background:#0f172a;color:#cfe0ff;border-radius:10px;padding:16px 18px;
+    font-family:"Cascadia Code",Consolas,monospace;font-size:13px;white-space:pre;overflow-x:auto}
+  .glossary dl{margin:6px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px}
+  .glossary dt{font-weight:700;color:var(--accent)}
+  .glossary dd{margin:0}
+  .callout{background:#fff7ed;border:1px solid #f3d8a8;border-left:5px solid var(--warn);
+    border-radius:10px;padding:14px 18px;margin:14px 0}
+  .callout b{color:var(--warn)}
+  .decision{border-left:5px solid var(--todo)}
+  .decision .qid{display:inline-block;background:var(--todo);color:#fff;font-weight:700;
+    border-radius:6px;padding:1px 9px;font-size:13px;margin-right:8px}
+  .why{background:#f3f8ff;border:1px solid #d4e4fb;border-radius:9px;
+    padding:11px 14px;margin:10px 0;font-size:13.5px;color:#33445e}
+  .why .row{margin:3px 0}
+  .why b{color:var(--accent)}
+  .prosCons{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+  .prosCons > div{border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px}
+  .prosCons .pros{background:#f2faf5;border-color:#c8e4d3}
+  .prosCons .cons{background:#fbf4f4;border-color:#e7cccc}
+  .prosCons b{font-size:12px;letter-spacing:.04em}
+  .prosCons ul{margin:4px 0 0;padding-left:20px}
+  @media (max-width:640px){ .prosCons{grid-template-columns:1fr} }
+  .opts{margin:12px 0 6px}
+  .opt{display:flex;gap:9px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);
+    border-radius:8px;margin:7px 0;cursor:pointer;background:#fcfdff;transition:.12s}
+  .opt:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .opt input{margin-top:5px}
+  .opt .lbl{flex:1}
+  .opt .opt-main{font-weight:600}
+  .opt .opt-sub{display:block;font-size:12.5px;color:var(--sub);font-weight:400;margin-top:2px}
+  .opt .rec-mark{font-size:11px;color:var(--rec);font-weight:700;border:1px solid var(--rec);
+    border-radius:999px;padding:0 7px;white-space:nowrap;margin-left:6px;align-self:flex-start}
+  .memo{width:100%;min-height:54px;border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-family:inherit;font-size:13.5px;resize:vertical;margin-top:8px}
+  .memo::placeholder{color:#aab2bd}
+  .guidefill{min-height:120px}
+  .toolbar{position:sticky;bottom:0;background:rgba(246,247,249,.94);backdrop-filter:blur(4px);
+    border-top:1px solid var(--line);padding:12px 0;margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
+  button{font:inherit;font-weight:600;border:none;border-radius:9px;padding:10px 18px;
+    cursor:pointer;background:var(--accent);color:#fff}
+  button.ghost{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+  button:hover{filter:brightness(1.05)}
+  #summaryBox{width:100%;min-height:200px;margin-top:12px;border:1px solid var(--line);
+    border-radius:10px;padding:12px;font-family:"Cascadia Code",Consolas,monospace;font-size:13px}
+  .note{font-size:12.5px;color:var(--sub)}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:3px 0}
+
+  body.static .opt input{display:none}
+  body.static .opt .lbl::before{content:"☐  ";font-size:16px;color:#445}
+  body.static .memo{min-height:0}
+  body.static .memo::after{content:""}
+  body.static .toolbar,body.static #summarySection,body.static .note.interactive-only{display:none}
+  body.static .memo{border:none;border-bottom:1px dashed #b9c1cc;border-radius:0;min-height:48px}
+
+  @media print{
+    body{background:#fff} .toolbar{display:none} .opt:hover{background:#fcfdff}
+    header.top{box-shadow:none}
+  }
+</style>
+</head>
+<body class="interactive">
+<div class="wrap">
+
+<header class="top">
+  <h1>teach-mode UX 改修 判断シート</h1>
+  <p>many-ai-usage の teach-mode 改修 plan の残り 3 判断点を、メリット・デメリットを見ながら選ぶ</p>
+  <div class="meta">最終更新: 2026-07-16 (木) 11:34:58 ／ 対象: many-ai-usage v0.1.1 or v0.2 の teach-mode ／ 出席想定: ishizakahiroshi 単独</div>
+</header>
+
+<div class="legend">
+  <span class="tag done">■ 決定済み</span>
+  <span class="tag todo">■ 未決定（本日の相談）</span>
+  <span class="tag rec">■ おすすめ案</span>
+  <span class="tag p1">■ 開発 (自分)</span>
+</div>
+<p class="note">※ 各質問には「やさしい説明」と「メリット・デメリット」が付いています。専門用語は下の「用語ミニ解説」を見てください。</p>
+
+<h2>1. 全体像（まず絵で）</h2>
+<div class="card">
+  <h3>やりたいこと（一言で）</h3>
+  <p>拡張の <b>teach-mode</b>（user がページ上の残枠数字をクリックして「これ追跡して」と教える仕組み）の UX を改修する。目玉は「新規タブで開く（案 D・決定済み）」と「1 タブで複数 metric を連続 teach できる Continuous mode」。本シートで残り 3 判断点を決める。</p>
+</div>
+
+<div class="card"><h3>teach-mode の流れ（改修後の想定）</h3><div class="arch">[Track this element ▸]
+      ↓ 拡張が新規タブで provider の usage ページを開く（案 D）
+[新規タブ: usage ページ + floating panel]
+      ↓ user が数値をクリック
+    保存 → panel「保存済み: 1 個」
+      ↓ 続けてクリック
+    保存 → panel「保存済み: 2 個」
+      ↓ [完了して戻る]
+[options: dashboard に全 metric 反映]</div></div>
+
+<div class="card glossary">
+  <h3>用語ミニ解説（迷ったらここ）</h3>
+  <dl>
+    <dt>teach-mode</dt><dd>user がページ上の数値を 1 回クリックして「拡張にここを覚えさせる」仕組み。CSS selector と近くのテキストが保存され、次回以降その要素を自動で読む</dd>
+    <dt>picker</dt><dd>拡張がページに重ねる「候補ハイライト」+ tooltip。マウスを動かすと候補が変わり、クリックで確定</dd>
+    <dt>floating panel</dt><dd>対象タブの右上に固定表示する小さな進行状況ウィンドウ。「保存済み: N 個」を表示し「完了」「キャンセル」ボタンを持つ</dd>
+    <dt>metric</dt><dd>追跡する 1 つの数値項目。例:「Codex の週間利用上限 (0% 残り)」「残りのクレジット (0)」</dd>
+    <dt>Continuous mode</dt><dd>1 度 picker を起動したら、user が「完了」と言うまで何個でも metric を追加できるモード。逆は「1 回押す = 1 個 teach = 終わり」の <b>単発 mode</b></dd>
+    <dt>anchor (アンカー)</dt><dd>「教えた要素」を後で探すための情報一式 (CSS selector + 近くのテキスト + タグ構造の fingerprint)</dd>
+    <dt>reset anchor</dt><dd>metric の「いつリセットされるか」の日時を書いた要素。例:「リセット: 2026/07/22 20:46」</dd>
+    <dt>ヒューリスティック</dt><dd>拡張が「これが数値っぽい」と自動判定するルール群。picker の tooltip 表示にも使う</dd>
+  </dl>
+</div>
+
+<h2>2. すでに決まっていること（確認だけ）</h2>
+<div class="card">
+  <table>
+    <tr><th>項目</th><th>決定内容</th></tr>
+    <tr><td>案 D (新規タブ open)</td><td>Track this element を押したら拡張が provider の URL を新規タブで開いて picker 注入する。既存タブは探さない</td></tr>
+    <tr><td>Try samples の実装</td><td>v0.1.0 で完了 (Remote Registry 版)。origin/main に push 済み</td></tr>
+    <tr><td>掲載サービス</td><td>6 個: Claude / Codex CLI / Grok / Copilot / Cursor / Ollama</td></tr>
+    <tr><td>実装先</td><td>v0.1.0 の後の v0.1.1 or v0.2 の feature として。次セッションで着手</td></tr>
+  </table>
+</div>
+
+<h2>3. これから決めること（本日の相談）</h2>
+<p class="note interactive-only">各項目で選択肢を選び、メモ欄に補足を書いてください。最後の「決定サマリを出力」で、選んだ内容をまとめてコピーできます。</p>
+
+<h3>A. teach-mode の UX 方向性</h3>
+
+<div class="card decision">
+  <p><span class="qid">A1</span><span class="tag p1">開発 (自分)</span> <b>Q1. Continuous picker mode を採用するか</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> 1 回 Track this element を押した時に、metric を何個 teach できるか (1 個 or 何個でも)。</div>
+    <div class="row"><b>なぜ大事？</b> Codex や Copilot は「週次 + 5-hour + 残クレジット」等 複数 metric を追跡したくなる。1 回 1 個だと Track ボタンを N 回押す + タブが N 個開くので UX が悪い。</div>
+    <div class="row"><b>たとえると：</b> レシートを 1 枚ずつしか読み取れないスキャナ (単発) と、続けて何枚でも重ねて読み取れるスキャナ (Continuous)。後者の方が家計簿つけるのが楽。</div>
+  </div>
+  <div class="prosCons">
+    <div class="pros">
+      <b>A: Continuous mode の 👍</b>
+      <ul>
+        <li>複数 metric を <b>1 タブ・1 セッション</b>で登録できる</li>
+        <li>options ↔ usage ページの往復ゼロ</li>
+        <li>「保存済み: N 個」panel で進捗が可視化される</li>
+        <li>DevTools 系ツール (element inspector) と同じ操作感で自然</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <b>A: Continuous mode の 👎</b>
+      <ul>
+        <li>実装コスト高: floating panel の DOM + state 管理 + shadow DOM 化 (対象ページとの衝突回避)</li>
+        <li>panel の DOM が対象ページの z-index / iframe と衝突する可能性 (shadow DOM で対処)</li>
+        <li>「間違って複数保存」の undo/削除 UI が必要</li>
+      </ul>
+    </div>
+  </div>
+  <div class="prosCons">
+    <div class="pros">
+      <b>B: 現状「1 回 1 metric」の 👍</b>
+      <ul>
+        <li>実装がシンプル (現状ロジックをほぼそのまま流用)</li>
+        <li>panel の DOM 衝突リスクなし</li>
+        <li>ユーザーが 1 個だけ追跡したい時にオーバーヘッドなし</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <b>B: 現状「1 回 1 metric」の 👎</b>
+      <ul>
+        <li>複数 metric 追跡時に UX が悪い (Track を N 回 + タブが N 個)</li>
+        <li>Codex の "週間 + 残クレジット" のように 2〜3 metric ある provider で毎回ストレス</li>
+        <li>「これ 1 個 teach したら終わり」の断片的操作感 (継続性がない)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="opts" data-q="A1">
+    <label class="opt"><input type="radio" name="A1"><span class="lbl"><span class="opt-main">A: Continuous mode を採用する</span><span class="opt-sub">floating panel で「保存済み: N 個」を見せて連続 teach できる。実装コストは高いが UX が明確に上がる</span></span><span class="rec-mark">おすすめ</span></label>
+    <label class="opt"><input type="radio" name="A1"><span class="lbl"><span class="opt-main">B: 現状の「1 回 1 metric」のまま</span><span class="opt-sub">シンプル・実装コスト低。ただし複数 metric provider で UX が犠牲になる</span></span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>B. Reset anchor（リセット日時）の教え方</h3>
+
+<div class="card decision">
+  <p><span class="qid">B1</span><span class="tag p1">開発 (自分)</span> <b>Q2. reset anchor をどう取るか</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> metric ごとに「いつリセットされるか」を、user に明示的に教わるか / 拡張が自動で拾うか。</div>
+    <div class="row"><b>なぜ大事？</b> reset 日時があると「あと 4 日で回復」と表示できて便利。ただし teach で毎回聞くと UX が重くなる (1 metric = 2 クリック要求)。</div>
+    <div class="row"><b>たとえると：</b> 賞味期限。A = レジで毎回「賞味期限どこ？」と店員に聞かれる、B = 商品自体に「2026/07/22」と印刷済みで自動で読み取る。B が普通。</div>
+  </div>
+  <div class="prosCons">
+    <div class="pros">
+      <b>A: 毎回聞く の 👍</b>
+      <ul>
+        <li>reset 位置が確実に取れる (自動推測失敗ゼロ)</li>
+        <li>実装が単純 (picker の状態機械を 2 段階にするだけ)</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <b>A: 毎回聞く の 👎</b>
+      <ul>
+        <li>teach が 1 metric = 2 クリック必須になり UX 重い</li>
+        <li>reset を持たない metric ("残りクレジット" 数値のみ) では聞かれても Skip 必要で無駄</li>
+        <li>Continuous mode との相性が悪い (連続 teach のリズムが崩れる)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="prosCons">
+    <div class="pros">
+      <b>B: 自動推測に任せる の 👍</b>
+      <ul>
+        <li>teach 中は「値クリック 1 回」で完結・リズム軽い</li>
+        <li>「リセット: YYYY/MM/DD」「Resets in N days」形式は高確率で自動抽出可</li>
+        <li>失敗時のみ後付けで options から reset を re-teach できる (救済経路あり)</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <b>B: 自動推測に任せる の 👎</b>
+      <ul>
+        <li>自動抽出のヒューリスティックを実装する必要 (パターンを増やしていく)</li>
+        <li>「リセット」文言がない provider (例: 「Weekly usage · Fri 09:00 JST」) だと拾えない可能性</li>
+        <li>誤検出時に user が気づかない可能性 (だが値取得には影響しない)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="opts" data-q="B1">
+    <label class="opt"><input type="radio" name="B1"><span class="lbl"><span class="opt-main">A: teach 中に毎回 reset 日時をクリックさせる (Skip 可)</span><span class="opt-sub">確実に取れるが 2 クリック要求で UX が重い</span></span></label>
+    <label class="opt"><input type="radio" name="B1"><span class="lbl"><span class="opt-main">B: 自動推測に任せる (失敗時は後付け teach)</span><span class="opt-sub">teach 中は値クリック 1 回で軽い。ヒューリスティック実装が要る</span></span><span class="rec-mark">おすすめ</span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h3>C. picker の "2026%" 誤検出バグの扱い</h3>
+
+<div class="card decision">
+  <p><span class="qid">C1</span><span class="tag p1">開発 (自分)</span> <b>Q3. picker が年号を数値候補として拾うバグをどこで直すか</b></p>
+  <div class="why">
+    <div class="row"><b>何を決める？</b> Codex の teach 実験で picker の tooltip が「2026% · click to track」と表示された (日付の "2026" を数値として誤検出)。この修正を本 plan (teach-mode UX 改修) に含めるか、別 bugfix として独立して扱うか。</div>
+    <div class="row"><b>なぜ大事？</b> 誤検出は teach の候補プレビューがおかしく見えるだけで、user がクリックすればその要素の selector は正しく保存される (実害小)。ただし tooltip が変な数字を出すのは信頼感を落とす。</div>
+    <div class="row"><b>たとえると：</b> 家電修理。今回はエアコンの UI 刷新 (teach-mode UX)。ついでにリモコンの液晶にゴミ表示が出るバグ (2026% 誤検出) も直すか、別回で直すか。</div>
+  </div>
+  <div class="prosCons">
+    <div class="pros">
+      <b>A: 本 plan に含める の 👍</b>
+      <ul>
+        <li>picker 周りをまとめて触るので、コード側の重複作業が減る</li>
+        <li>UX 改修とヒューリスティック改善が同じ QA で確認できる</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <b>A: 本 plan に含める の 👎</b>
+      <ul>
+        <li>スコープが膨らむ (本 plan は既に 12 ステップ)</li>
+        <li>リリース時期が bugfix ペースに引きずられる</li>
+        <li>md の主題がぼやける (UX 改修 + heuristic 改善が同居)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="prosCons">
+    <div class="pros">
+      <b>B: 別 bugfix md の 👍</b>
+      <ul>
+        <li>スコープが明確で md が読みやすい</li>
+        <li>docsweep 上で status を別管理できる (heuristic 改善は別リリースサイクルに乗せられる)</li>
+        <li>本 plan は UX に集中できる</li>
+        <li>heuristic 改善は将来別のバグ (数値誤認識全般) に拡張しやすい</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <b>B: 別 bugfix md の 👎</b>
+      <ul>
+        <li>md が増える (docs/local に 1 個追加)</li>
+        <li>実装時に本 plan と bugfix を両方読む必要 (contract の重複)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="opts" data-q="C1">
+    <label class="opt"><input type="radio" name="C1"><span class="lbl"><span class="opt-main">A: 本 plan (teach-mode UX 改修) に含めて同時実装</span><span class="opt-sub">まとめて片付ける・md 1 個で済む。スコープが膨らむ</span></span></label>
+    <label class="opt"><input type="radio" name="C1"><span class="lbl"><span class="opt-main">B: 別 bugfix md として起こし独立対応</span><span class="opt-sub">スコープ明確・別サイクルで出せる。md が 1 個増える</span></span><span class="rec-mark">おすすめ</span></label>
+  </div>
+  <textarea class="memo" placeholder="メモ"></textarea>
+</div>
+
+<h2>4. 決定サマリ</h2>
+<div class="card" id="summarySection">
+  <p class="note">選んだ内容とメモを下に書き出します。コピーして共有・メールに貼れます。</p>
+  <div class="toolbar">
+    <button onclick="generateSummary()">決定サマリを出力</button>
+    <button class="ghost" onclick="copySummary()">クリップボードにコピー</button>
+    <button onclick="generateMarkdown()">Markdown 形式で出力</button>
+    <button class="ghost" onclick="downloadMarkdown()">.md ファイル保存</button>
+    <button class="ghost" onclick="window.print()">印刷 / PDF 保存</button>
+  </div>
+  <textarea id="summaryBox" placeholder="「決定サマリを出力」を押すと、選んだ選択肢とメモがここにまとまります。"></textarea>
+</div>
+
+<p class="note" style="margin-top:24px">本資料: <code>C:\dev\github\public\many-ai-usage\docs\local\review_teach-mode-ux_2026-07-16.html</code> ／ 関連: <code>plan_teach-multi-metric-continuous.md</code> · <code>plan_try-samples-onboarding.md</code></p>
+
+</div>
+
+<script>
+function textOfChecked(q){
+  var box=document.querySelector('.opts[data-q="'+q+'"]');
+  if(!box) return null;
+  var r=box.querySelector('input:checked');
+  if(!r) return null;
+  var opt=r.closest('.opt');
+  var main=opt.querySelector('.opt-main')||opt.querySelector('.lbl');
+  return main.innerText.trim();
+}
+function generateSummary(){
+  var out=[];
+  out.push("=== teach-mode UX 改修 判断シート 決定サマリ ===");
+  out.push("出力日時(端末側): "+new Date().toLocaleString('ja-JP'));
+  out.push("");
+  document.querySelectorAll('.card.decision').forEach(function(card){
+    var qidEl=card.querySelector('.qid');
+    if(!qidEl) return;
+    var qid=qidEl.innerText.trim();
+    var title=card.querySelector('p').innerText.replace(qid,'').trim();
+    var memo=card.querySelector('.memo');
+    out.push("["+qid+"] "+title);
+    var hasOpts=card.querySelector('.opts');
+    if(!hasOpts){
+      out.push("  記述: "+((memo&&memo.value.trim())||"（未記入）"));
+    }else{
+      out.push("  選択: "+(textOfChecked(qid)||"（未選択）"));
+      if(memo&&memo.value.trim()) out.push("  メモ: "+memo.value.trim());
+    }
+    out.push("");
+  });
+  document.getElementById('summaryBox').value=out.join("\n");
+}
+function copySummary(){
+  var b=document.getElementById('summaryBox');
+  if(!b.value.trim()) generateSummary();
+  b.select();
+  navigator.clipboard.writeText(b.value).then(function(){alert("コピーしました。");},
+    function(){document.execCommand('copy');alert("コピーしました。");});
+}
+function escapePipe(s){return String(s).replace(/\|/g,'\\|').replace(/\r?\n/g,' ');}
+function generateMarkdown(){
+  var out=[];
+  out.push("# teach-mode UX 改修 判断シート 決定記録");
+  out.push("");
+  out.push("> 出力日時(端末側): "+new Date().toLocaleString('ja-JP'));
+  out.push("");
+  out.push("## 決定サマリ");
+  out.push("");
+  out.push("| ID | 論点 | 採択 |");
+  out.push("|---|---|---|");
+  document.querySelectorAll('.card.decision').forEach(function(card){
+    var qidEl=card.querySelector('.qid');
+    if(!qidEl) return;
+    var qid=qidEl.innerText.trim();
+    var titleEl=card.querySelector('p');
+    var title=titleEl?titleEl.innerText.replace(qid,'').trim():'';
+    var sel;
+    var hasOpts=card.querySelector('.opts');
+    var memo=card.querySelector('.memo');
+    if(!hasOpts){
+      sel="（記述）"+((memo&&memo.value.trim().split(/\r?\n/)[0])||"未記入");
+    }else{
+      sel=textOfChecked(qid)||"（未選択）";
+    }
+    out.push("| "+qid+" | "+escapePipe(title)+" | "+escapePipe(sel)+" |");
+  });
+  out.push("");
+  var memos=[];
+  document.querySelectorAll('.card.decision').forEach(function(card){
+    var qidEl=card.querySelector('.qid');
+    if(!qidEl) return;
+    var qid=qidEl.innerText.trim();
+    var memo=card.querySelector('.memo');
+    if(memo&&memo.value.trim()&&card.querySelector('.opts')){
+      memos.push("### "+qid);
+      memos.push(memo.value.trim());
+      memos.push("");
+    }
+  });
+  if(memos.length){
+    out.push("## 各論点メモ");
+    out.push("");
+    Array.prototype.push.apply(out,memos);
+  }
+  document.getElementById('summaryBox').value=out.join("\n");
+}
+function downloadMarkdown(){
+  var b=document.getElementById('summaryBox');
+  if(!b.value.trim()||!b.value.startsWith('#')) generateMarkdown();
+  var content=b.value;
+  var blob=new Blob([content],{type:'text/markdown;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='review_teach-mode-ux_2026-07-16_decisions.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+</script>
+</body>
+</html>
