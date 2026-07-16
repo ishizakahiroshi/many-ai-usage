@@ -1,6 +1,5 @@
 import {
   makeRuntimeState,
-  makeSampleProviders,
   safeParseProvider,
   safeParseRuntimeState,
   safeParseSnapshot,
@@ -21,12 +20,35 @@ function localStorage(): chrome.storage.LocalStorageArea {
 export async function initializeStorage(): Promise<void> {
   const result = await localStorage().get([PROVIDERS_KEY, VERSION_KEY]);
   const rawProviders = result[PROVIDERS_KEY];
-  if (!Array.isArray(rawProviders)) {
-    const providers = makeSampleProviders();
-    await localStorage().set({ [PROVIDERS_KEY]: providers, [VERSION_KEY]: 1 });
-    const runtimeStates = Object.fromEntries(providers.map((provider) => [provider.id, makeRuntimeState(provider.id, 'needs_permission')]));
-    await localStorage().set({ [RUNTIME_KEY]: runtimeStates });
+  const patch: Record<string, unknown> = {};
+  if (!Array.isArray(rawProviders)) patch[PROVIDERS_KEY] = [];
+  if (typeof result[VERSION_KEY] !== 'number') patch[VERSION_KEY] = 1;
+  if (Object.keys(patch).length > 0) await localStorage().set(patch);
+}
+
+export async function applyRegistryProviders(remote: ProviderConfig[]): Promise<{ added: string[]; skipped: string[] }> {
+  const existingProviders = await getProviders();
+  const existingIds = new Set(existingProviders.map((provider) => provider.id));
+  const missing = remote.filter((provider) => !existingIds.has(provider.id));
+  if (missing.length === 0) {
+    return { added: [], skipped: remote.map((provider) => provider.id) };
   }
+  const baseOrder = existingProviders.length;
+  const additions = missing.map((provider, index) => ({ ...provider, order: baseOrder + index }));
+  const nextProviders = [...existingProviders, ...additions];
+  await localStorage().set({ [PROVIDERS_KEY]: nextProviders });
+  const runtimeResult = await localStorage().get(RUNTIME_KEY);
+  const runtimeStates = { ...(runtimeResult[RUNTIME_KEY] ?? {}) };
+  for (const sample of additions) {
+    if (!runtimeStates[sample.id]) {
+      runtimeStates[sample.id] = makeRuntimeState(sample.id, 'needs_permission');
+    }
+  }
+  await localStorage().set({ [RUNTIME_KEY]: runtimeStates });
+  return {
+    added: additions.map((provider) => provider.id),
+    skipped: remote.filter((provider) => existingIds.has(provider.id)).map((provider) => provider.id),
+  };
 }
 
 export async function getProviders(): Promise<ProviderConfig[]> {

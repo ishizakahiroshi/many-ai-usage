@@ -141,6 +141,20 @@ export const providerConfigSchema = v.object({
   order: v.number(),
 });
 
+const providersRegistryItemSchema = v.object({
+  id: v.pipe(v.string(), v.minLength(1)),
+  displayName: v.pipe(v.string(), v.minLength(1)),
+  url: v.pipe(v.string(), v.url()),
+  urlMatch: v.pipe(v.array(v.string()), v.minLength(1)),
+  note: v.optional(v.string()),
+});
+
+const providersRegistrySchema = v.object({
+  schema: v.literal('many-ai-usage.providers.v1'),
+  updated: v.string(),
+  providers: v.pipe(v.array(providersRegistryItemSchema), v.minLength(1)),
+});
+
 const normalizedMetricSchema = v.object({
   id: v.string(),
   label: v.string(),
@@ -192,6 +206,24 @@ export function safeParseProvider(value: unknown): ProviderConfig | null {
   return result.success ? result.output : null;
 }
 
+export function parseProvidersRegistryResponse(raw: unknown, now = new Date().toISOString()): ProviderConfig[] {
+  const registry = v.parse(providersRegistrySchema, raw);
+  return registry.providers.map((provider, order) => ({
+    schema: 'many-ai-usage.provider.v1',
+    id: provider.id,
+    displayName: provider.displayName,
+    url: provider.url,
+    urlMatch: provider.urlMatch,
+    mode: 'auto',
+    displayEnabled: true,
+    refreshIntervalMinutes: 15,
+    metrics: [],
+    createdAt: now,
+    updatedAt: now,
+    order,
+  }));
+}
+
 export function safeParseSnapshot(value: unknown): NormalizedSnapshot | null {
   const result = v.safeParse(normalizedSnapshotSchema, value);
   return result.success ? result.output : null;
@@ -224,37 +256,4 @@ export function makeRuntimeState(providerId: string, status: RuntimeStatus = 'ne
     errorLabel: null,
     consecutiveFailures: 0,
   };
-}
-
-export function makeSampleProviders(now = new Date().toISOString()): ProviderConfig[] {
-  return [
-    {
-      schema: 'many-ai-usage.provider.v1',
-      id: 'sample:claude',
-      displayName: 'Claude',
-      url: 'https://claude.ai/new#settings/usage',
-      urlMatch: ['https://claude.ai/new*'],
-      mode: 'auto',
-      displayEnabled: true,
-      refreshIntervalMinutes: 15,
-      metrics: [],
-      createdAt: now,
-      updatedAt: now,
-      order: 0,
-    },
-    {
-      schema: 'many-ai-usage.provider.v1',
-      id: 'sample:codex',
-      displayName: 'Codex',
-      url: 'https://chatgpt.com/codex/cloud/settings/analytics#usage',
-      urlMatch: ['https://chatgpt.com/codex/cloud/settings/analytics*'],
-      mode: 'auto',
-      displayEnabled: true,
-      refreshIntervalMinutes: 15,
-      metrics: [],
-      createdAt: now,
-      updatedAt: now,
-      order: 1,
-    },
-  ];
 }

@@ -16,6 +16,7 @@
     "type": "module"
   },
   "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": ["https://raw.githubusercontent.com/ishizakahiroshi/*"],
   "optional_host_permissions": ["*://*/*"],
   "icons": {
     "128": "assets/icons/icon-512.png"

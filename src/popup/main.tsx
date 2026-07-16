@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DashboardResponse } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, resetLabel, statusLabel } from '../shared/format';
 import type { NormalizedMetric, ProviderConfig, ProviderRuntimeState } from '../shared/schema';
+import { USAGE_GUIDE_URL } from '../shared/samples';
 import { sendMessage } from '../shared/runtime';
 import { originPattern } from '../shared/url';
 import './styles.css';
@@ -23,6 +24,14 @@ function lowestMetric(metrics: NormalizedMetric[]): string | null {
 
 function openOptions() {
   void chrome.runtime.openOptionsPage();
+}
+
+function openSampleOptions() {
+  void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?trySamples=1'), active: true });
+}
+
+function openUsageGuide() {
+  void chrome.tabs.create({ url: USAGE_GUIDE_URL, active: true });
 }
 
 function refresh(providerId: string, reload: () => void) {
@@ -131,7 +140,7 @@ function PopupApp() {
         <button class="text-button" onClick={openOptions}>⚙ options</button>
       </header>
       <section class="provider-list" aria-label="Usage providers">
-        {normal.length === 0 && <div class="empty-state"><strong>Nothing captured yet</strong><span>Open a registered usage page to begin.</span></div>}
+        {normal.length === 0 && <div class="empty-state"><strong>{dashboard.providers.length === 0 ? 'No providers yet' : 'Nothing captured yet'}</strong><span>{dashboard.providers.length === 0 ? 'Try six URL-only samples, or add your own usage page.' : 'Open a registered usage page to begin.'}</span>{dashboard.providers.length === 0 && <div class="empty-actions"><button class="sample-button" onClick={openSampleOptions}>Try samples ▸</button><button onClick={openUsageGuide}>使い方を見る →</button></div>}</div>}
         {normal.map((provider) => <ProviderRow key={provider.id} provider={provider} snapshot={dashboard.snapshots[provider.id]} state={dashboard.runtimeStates[provider.id]} reload={reload} />)}
       </section>
       {issues.length > 0 && <section class="issues">

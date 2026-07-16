@@ -8,10 +8,12 @@ v0.1.0 makes teach-mode the safe default for exact usage values: the user select
 - Taught value extraction and local snapshots
 - Re-teach prompt after three consecutive failures
 - Chrome ZIP and Firefox XPI packaging in the tag-driven release workflow
+- Opt-in Try samples onboarding for six URL-only examples from the documented GitHub raw registry
 
 ## Changed
 
 - Popup and options now expose taught metrics and page-tile fallback
+- New installations start with zero providers and make no provider-page request until the user adds or imports one
 - Privacy documentation and store submission notes are available in Japanese and English
 
 ## Fixed

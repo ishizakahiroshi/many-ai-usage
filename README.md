@@ -9,6 +9,20 @@ many-ai-usage is a Manifest V3 Chrome/Firefox extension that shows visible AI su
 - Cookies, tokens, account identifiers, raw HTML, and usage data are not sent to a server or stored as raw data.
 - The extension performs read-only page capture. It does not submit forms, send chats, or change provider settings.
 - Host access is requested per registered usage-page origin.
+- The extension starts with zero providers and makes no provider-page requests on first run.
+- Only when the user confirms **Try samples** does the extension fetch URL-only sample data from the documented GitHub raw registry. Captured usage data is never included in that request.
+
+## Getting started
+
+1. Open the options page.
+2. Choose **Try samples ▸** to fetch six URL-only examples, or add your own usage page.
+3. Open a registered page and use **Track this element** to teach the exact visible value.
+
+The sample registry is data, not executable code:
+
+`https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json`
+
+See the [Japanese usage guide](https://ishizakahiroshi.github.io/articles/many-ai-usage/usage.html) for the practice page and service-by-service navigation recipes.
 
 ## Development
 

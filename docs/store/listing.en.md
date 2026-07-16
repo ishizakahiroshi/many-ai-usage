@@ -14,6 +14,7 @@ many-ai-usage reads the visible value that you choose on a registered usage page
 
 Key features:
 
+- Start empty, or explicitly fetch six URL-only examples with Try samples
 - Teach a visible usage value with one click
 - Re-find the value after page changes using a selector and fingerprint
 - Show a Re-teach prompt after three consecutive read failures
@@ -29,6 +30,7 @@ Permissions:
 
 - `storage`: store settings, taught selectors, and local snapshots
 - `tabs` / `scripting`: find registered pages and run the local reader
+- Fixed GitHub raw host access: fetch the documented URL-only sample registry only after the user confirms Try samples
 - Optional host access: read only registered usage pages after the user grants access
 
 Suggested category: Productivity

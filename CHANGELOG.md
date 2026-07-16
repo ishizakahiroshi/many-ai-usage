@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-No unreleased changes.
+### Added
+
+- Opt-in **Try samples** onboarding for six URL-only provider examples fetched from the documented GitHub raw registry.
+- Empty-state links to the Japanese usage guide in the popup and options page.
+
+### Changed
+
+- New installations now start with zero providers; no provider definitions are bundled or seeded automatically.
 
 ## [0.1.0] - 2026-07-14
 

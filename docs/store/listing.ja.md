@@ -14,6 +14,7 @@ many-ai-usage は、登録した利用状況ページからユーザーが選ん
 
 主な機能:
 
+- 初期状態は空。必要な場合だけ Try samples で URL のみのサンプル6件を取得
 - 表示中の利用値をワンクリックで登録
 - selector と fingerprint によるページ改訂時の再探索
 - 3 回連続で読めない場合の Re-teach 通知
@@ -29,6 +30,7 @@ many-ai-usage は、登録した利用状況ページからユーザーが選ん
 
 - `storage`: 設定、教えた selector、ローカルスナップショットを保存
 - `tabs` / `scripting`: 登録ページを見つけ、ページ内のローカル読み取り処理を実行
+- GitHub raw への固定 host access: Try samples の確認後だけ、公開された URL のみのサンプル台帳を取得
 - optional host access: ユーザーが許可した登録済み利用状況ページだけを読み取り
 
 カテゴリ候補: Productivity

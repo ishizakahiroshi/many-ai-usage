@@ -6,6 +6,7 @@
 <h1>many-ai-usage privacy policy</h1>
 <p>many-ai-usage reads visible usage information from usage pages that the user registers and opens in their own browser. Parsing occurs locally in the browser.</p>
 <p>The extension does not send page HTML, cookies, authentication tokens, account identifiers, or normalized usage data to an external server. It does not operate a server or provide cloud synchronization.</p>
+<p>On first run, no provider page or sample registry is contacted. Only after the user confirms <strong>Try samples</strong> does the extension fetch a public URL-only JSON registry from <code>raw.githubusercontent.com/ishizakahiroshi/many-ai-cli</code>. That request contains no user data, and the schema-validated response is not executed as code.</p>
 <p>The extension requests host access only for registered usage-page origins. It performs read-only capture and does not submit forms, send messages, or change provider settings.</p>
 <p>Stored data is limited to provider settings, taught selectors/fingerprints, normalized snapshots, and diagnostic summaries in the browser's extension storage. Users can remove provider entries from the settings page.</p>
 </main>

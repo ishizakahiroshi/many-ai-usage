@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DashboardResponse } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, statusLabel } from '../shared/format';
 import type { ProviderConfig, ProviderMode } from '../shared/schema';
+import { fetchProvidersRegistry, isSampleProviderId, PROVIDERS_REGISTRY_URL, USAGE_GUIDE_URL } from '../shared/samples';
+import { applyRegistryProviders } from '../shared/storage';
 import { sendMessage } from '../shared/runtime';
 import { originChanged, originPattern, urlWithoutHash } from '../shared/url';
 import './styles.css';
@@ -39,6 +41,9 @@ function OptionsApp() {
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [samplesDialogOpen, setSamplesDialogOpen] = useState(() => new URLSearchParams(window.location.search).get('trySamples') === '1');
+  const [samplesLoading, setSamplesLoading] = useState(false);
+  const [samplesError, setSamplesError] = useState('');
 
   const reload = () => void sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' }).then((next) => {
     setDashboard(next);
@@ -53,6 +58,11 @@ function OptionsApp() {
   });
   useEffect(reload, []);
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('trySamples')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+  useEffect(() => {
     const onStorageChanged = () => reload();
     chrome.storage.onChanged.addListener(onStorageChanged);
     return () => chrome.storage.onChanged.removeListener(onStorageChanged);
@@ -61,6 +71,7 @@ function OptionsApp() {
   const selectedProvider = useMemo(() => dashboard?.providers.find((provider) => provider.id === selectedId) ?? null, [dashboard, selectedId]);
   const selectedSnapshot = selectedProvider && dashboard ? dashboard.snapshots[selectedProvider.id] : null;
   const selectedState = selectedProvider && dashboard ? dashboard.runtimeStates[selectedProvider.id] : null;
+  const showTrySamples = dashboard ? !dashboard.providers.some((provider) => isSampleProviderId(provider.id)) : false;
 
   const select = (id: string | 'new') => {
     if (dirty && !window.confirm('Discard unsaved changes?')) return;
@@ -157,6 +168,29 @@ function OptionsApp() {
     reload();
   };
 
+  const openSamplesDialog = () => {
+    setSamplesError('');
+    setSamplesDialogOpen(true);
+  };
+
+  const importSamples = async () => {
+    setSamplesLoading(true);
+    setSamplesError('');
+    try {
+      const providers = await fetchProvidersRegistry();
+      const result = await applyRegistryProviders(providers);
+      setSamplesDialogOpen(false);
+      setMessage(result.added.length > 0
+        ? `Added ${result.added.length} sample providers. Open each usage page and teach the visible value.`
+        : 'Sample providers are already registered. Existing settings were not changed.');
+      reload();
+    } catch (error) {
+      setSamplesError(error instanceof Error ? error.message : 'Unable to fetch sample providers.');
+    } finally {
+      setSamplesLoading(false);
+    }
+  };
+
   if (!dashboard) return <div class="options-loading">Loading settings…</div>;
   return (
     <div class="options-shell">
@@ -164,6 +198,12 @@ function OptionsApp() {
       <div class="options-layout">
         <aside class="sidebar">
           <button class="add-button" onClick={() => select('new')}>＋ New provider</button>
+          {showTrySamples && <div class="samples-onboarding">
+            <strong>Need a starting point?</strong>
+            <span>Fetch six URL-only samples, then teach the values you want to track.</span>
+            <button class="samples-button" onClick={openSamplesDialog}>Try samples ▸</button>
+            <a href={USAGE_GUIDE_URL} target="_blank" rel="noopener noreferrer">使い方を見る →</a>
+          </div>}
           <div class="sidebar-label">Registered providers</div>
           <div class="provider-sidebar-list">
             {dashboard.providers.map((provider) => {
@@ -191,6 +231,19 @@ function OptionsApp() {
           </> : <div class="empty-panel">Choose a provider, or add a new usage page.</div>}
         </main>
       </div>
+      {samplesDialogOpen && <div class="samples-dialog-backdrop">
+        <section class="samples-dialog" role="dialog" aria-modal="true" aria-labelledby="samples-dialog-title">
+          <h2 id="samples-dialog-title">Try sample providers?</h2>
+          <p>以下のURLから、6サービス分のサンプル設定を取得します。</p>
+          <code>{PROVIDERS_REGISTRY_URL}</code>
+          <p>取得するのは表示名とURLパターンだけです。selector・Cookie・トークン・usage値は含まれません。登録後、各ページで追跡したい数値をteach-modeで教えてください。</p>
+          {samplesError && <p class="samples-error" role="alert">{samplesError}</p>}
+          <div class="samples-dialog-actions">
+            <button disabled={samplesLoading} onClick={() => setSamplesDialogOpen(false)}>キャンセル</button>
+            <button class="primary-button" disabled={samplesLoading} onClick={() => void importSamples()}>{samplesLoading ? '取得中…' : samplesError ? '再試行' : '取得する'}</button>
+          </div>
+        </section>
+      </div>}
     </div>
   );
 }

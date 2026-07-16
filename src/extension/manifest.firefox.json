@@ -15,6 +15,7 @@
     "scripts": ["background.js"]
   },
   "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": ["https://raw.githubusercontent.com/ishizakahiroshi/*"],
   "optional_permissions": ["*://*/*"],
   "browser_specific_settings": {
     "gecko": {

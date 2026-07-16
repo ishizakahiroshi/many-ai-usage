@@ -8,7 +8,7 @@ fresh public clone でも有効な内容に保つこと。 -->
 
 **many-ai-usage** — 複数の AI サービスのサブスクリプション使用量（レート上限・残枠）を 1 画面のダッシュボードで一覧表示するブラウザ拡張（Manifest V3・Chrome / Firefox ハイブリッド）。ユーザーは各 AI サービス（Claude / ChatGPT / Grok / Gemini / GitHub Copilot / Cursor / Qwen / DeepSeek 等）にブラウザで普通にログインし、**usage ページの URL を登録するだけ**でよい。
 
-プロバイダ定義は同梱しない（サンプルは Claude / Codex の 2 件のみ）。取得の主経路は**ユーザーが要素を 1 回クリックして教える teach-mode**（CSS selector + DOM fingerprint を保存し、後続訪問で再読取）で、未登録のページは**タイルとして表示**する。旧ローカルヒューリスティック解析（%・progress 要素・リセット日時。日英中対応）は v0.1 runtime から除外し、合成 fixture の regression reference としてのみ保持する。picker の tooltip で選択候補をプレビューし、誤値を storage に書き込まない。運営側はプロバイダ知識をメンテせず UI/UX に専念する。解析はブラウザ内のみで行い、ページ HTML を外部 AI に送らない。サーバーは持たず、認証情報も usage データもすべてブラウザ内で完結する。
+プロバイダ定義は同梱せず、初期状態は 0 件。ユーザーが **Try samples** を明示実行した場合だけ、many-ai-cli リポジトリの公開 JSON から 6 サービス分の URL パターンを取得する（selector や実行コードは含まない）。取得の主経路は**ユーザーが要素を 1 回クリックして教える teach-mode**（CSS selector + DOM fingerprint を保存し、後続訪問で再読取）で、未登録のページは**タイルとして表示**する。旧ローカルヒューリスティック解析（%・progress 要素・リセット日時。日英中対応）は v0.1 runtime から除外し、合成 fixture の regression reference としてのみ保持する。picker の tooltip で選択候補をプレビューし、誤値を storage に書き込まない。解析はブラウザ内のみで行い、ページ HTML を外部 AI に送らない。独自サーバーは持たず、認証情報も usage データもすべてブラウザ内で完結する。
 
 配布は Chrome ウェブストア + Firefox AMO の 2 チャネルのみで、GitHub リポジトリを正典とする。npm の `many-ai-usage` はブランド保護の予約スタブのみ（配布経路ではない・リリース時に version だけ追従更新）。
 

@@ -1,6 +1,6 @@
 # many-ai-usage Privacy Policy
 
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 
 many-ai-usage reads visible usage information from usage pages that the user registers and opens in their own browser. Parsing is performed locally by the extension.
 
@@ -14,10 +14,17 @@ The extension stores only provider settings, taught selectors/fingerprints, norm
 
 The extension has no cloud service and does not upload captured data. It performs read-only capture and does not submit forms, send chats, or change provider settings.
 
+On first run, the extension does not contact provider pages or the sample registry. Only when the user confirms **Try samples** does it fetch this public JSON file:
+
+`https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json`
+
+That request retrieves display names and URL patterns only. It does not include cookies, authentication tokens, browsing history, page HTML, captured usage values, or other user data. The response is treated as data and is schema-validated; it is never executed as code.
+
 ## Permissions
 
 - `storage`: store the local configuration and captured snapshots.
 - `tabs` and `scripting`: find a registered usage page and run the local content script.
+- Fixed GitHub raw host access: fetch the public URL-only sample registry after explicit confirmation.
 - Optional host access: read the registered usage-page origin only after the user grants access.
 
 ## Changes

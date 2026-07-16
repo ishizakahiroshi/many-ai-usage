@@ -1,0 +1,368 @@
+<!doctype html>
+<!--docsweep-meta
+type: mockup
+status: planned
+tags: [mockup, usage-page, many-ai-usage]
+owner: ishizakahiroshi
+related: []
+last_reviewed: 2026-07-16
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>many-ai-usage 使い方ページ モック — 2026-07-16</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f3ea; --ink:#241f1a; --ink-soft:#837a6c; --line:rgba(36,31,26,0.12);
+    --accent:#ff7a3d; --card:#fffdf8; --ok:#2e7d4f; --warn:#b8860b; --bad:#b3261e;
+    --display:'Baloo 2','Zen Maru Gothic',system-ui,cursive;
+    --body:'Zen Maru Gothic',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.7;font-size:16px;text-wrap:pretty}
+  .wrap{max-width:min(1180px,94vw);margin:0 auto;padding:48px 0 80px}
+  h1{font-family:var(--display);font-weight:800;font-size:2rem;margin:0 0 8px;letter-spacing:-0.01em}
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:48px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+  h3{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:28px 0 10px}
+  a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+  .card{background:var(--card);border:2px solid var(--ink);border-radius:18px;padding:22px 24px;box-shadow:4px 5px 0 var(--line);margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);font-size:0.94rem;vertical-align:top}
+  th{background:#fffdf8;font-family:var(--display);font-weight:700}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-family:var(--display);font-weight:700;font-size:0.78rem;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+  .tag-ok{background:var(--ok);color:#fff} .tag-warn{background:var(--warn);color:#fff}
+  .tag-bad{background:var(--bad);color:#fff} .tag-accent{background:var(--accent);color:#fff}
+  .system-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:2px solid var(--ink);background:var(--card);font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .system-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .meta{color:var(--ink-soft);font-size:0.88rem}
+  .header-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+
+  /* wireframe primitives */
+  .wf{border:2px solid var(--ink);border-radius:14px;background:#fff;padding:0;margin:18px 0;overflow:hidden}
+  .wf-frame{padding:16px;display:flex;flex-direction:column;gap:12px;min-height:340px}
+  .wf-header{border:1.5px dashed var(--ink);border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:700}
+  .wf-block{border:1.5px dashed var(--ink-soft);border-radius:10px;padding:14px 16px;color:var(--ink-soft);font-family:var(--display)}
+  .wf-row{display:flex;gap:12px;flex-wrap:wrap}
+  .wf-row > *{flex:1;min-width:200px}
+  .wf-placeholder{display:flex;align-items:center;justify-content:center;min-height:80px;border:1.5px dashed var(--ink-soft);border-radius:10px;color:var(--ink-soft);font-family:var(--display);font-weight:700;letter-spacing:0.03em;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(36,31,26,0.04) 8px,rgba(36,31,26,0.04) 16px)}
+  .wf-caption{font-size:0.84rem;color:var(--ink-soft);padding:8px 16px;border-top:1px solid var(--line);background:#fffdf8}
+
+  /* teach 練習場（S-02）向け擬似 usage カード */
+  .fake-usage{border:1.5px dashed var(--ink);border-radius:10px;padding:16px 18px;background:#fff;position:relative}
+  .fake-usage h4{font-family:var(--display);font-weight:700;margin:0 0 10px;font-size:1rem}
+  .fake-bar{height:12px;background:#f0eadf;border:1px solid var(--ink);border-radius:999px;overflow:hidden;margin:6px 0 4px}
+  .fake-bar > span{display:block;height:100%;background:var(--accent)}
+  .fake-num{font-family:var(--display);font-weight:700;font-size:1.4rem}
+  .fake-sub{color:var(--ink-soft);font-size:0.86rem}
+  .clue{position:absolute;font-family:var(--display);font-weight:700;color:var(--accent);background:#fff;border:2px solid var(--accent);border-radius:999px;padding:2px 10px;font-size:0.78rem;transform:rotate(-4deg)}
+
+  ul.checklist{list-style:none;padding-left:0}
+  ul.checklist li{padding:6px 0;border-bottom:1px dashed var(--line)}
+  ul.checklist li::before{content:"☐";margin-right:10px;font-family:var(--display)}
+
+  .mockup-note{background:#fffdf8;border:2px dashed var(--warn);border-radius:12px;padding:12px 16px;margin:12px 0;font-size:0.9rem;color:var(--ink)}
+  .mockup-note b{font-family:var(--display)}
+
+  @media print{ body{background:#fff} .card{box-shadow:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header-row">
+    <span class="system-badge"><span class="dot"></span>対象: <b>many-ai-usage</b>（Chrome / Firefox 拡張）</span>
+    <span class="tag tag-accent">草案</span>
+    <span class="meta">v0.1 · 2026-07-16 · モックアップ</span>
+  </div>
+  <h1>使い方ページ モック</h1>
+  <p class="meta">最終公開先: <code>github.io/articles/many-ai-usage/usage.html</code> — works ページ (<code>work.html?id=many-ai-usage</code>) の「使い方を見る →」ボタンから飛ぶ先。方向性 (B) = 「練習場 + 実サイト向けレシピ集」。</p>
+
+  <div class="mockup-note">
+    <b>これはモックです</b>: 認識合わせ用の wireframe / セクション構成案。配色・実ロゴ・実スクショは載せず、<b>何がどこに来るか</b>だけ示す。実装時は github.io の既存 <code>assets/style.css</code> と work.html のヘッダー／フッターを再利用して自然に馴染ませる。
+  </div>
+
+  <h2>ページ構成（1 スクロール完結・4 セクション）</h2>
+  <table class="screen-list">
+    <thead><tr><th style="width:5em">ID</th><th style="width:16em">セクション</th><th>ねらい</th></tr></thead>
+    <tbody>
+      <tr><td>S-01</td><td><a href="#s-01">ヒーロー / TL;DR</a></td><td>拡張を入れた直後に「3 分で分かる」を約束する。<b>1 画面</b>で使い方の全体像を掴ませる。</td></tr>
+      <tr><td>S-02</td><td><a href="#s-02">teach-mode 練習場</a></td><td>擬似 usage カード（%・progress bar・リセット日時）を並べて、そこを 1 回 teach してみる。成功体験で終わる。</td></tr>
+      <tr><td>S-03</td><td><a href="#s-03">実サイト向けレシピ集</a></td><td>Claude / ChatGPT / Grok / Gemini / Copilot / Cursor / Codex それぞれの usage ページ URL と「どの数字をクリック？」の言葉ガイド。selector は書かない。</td></tr>
+      <tr><td>S-04</td><td><a href="#s-04">よくある質問 / 落とし穴</a></td><td>プライバシー・壊れた時・別 PC への移行など不安に先回りで答える。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="s-01">S-01  ヒーロー / TL;DR</h2>
+  <div class="wf">
+    <div class="wf-frame">
+      <div class="wf-header"><span>[github.io 共通ヘッダー: ishizakahiroshi / 作品 / DL数 / About / JA EN]</span><span>&nbsp;</span></div>
+      <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+        <div style="font-family:var(--display);font-weight:800;font-size:1.5rem;color:var(--ink)">many-ai-usage の使い方</div>
+        <div class="fake-sub" style="margin-top:4px">複数の AI サブスクの残枠を、1 画面で。ブラウザ内だけで完結。</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-block">
+          <div style="font-family:var(--display);font-weight:700;color:var(--ink)">3 分で分かる 3 ステップ</div>
+          <ol style="margin:8px 0 0 20px;color:var(--ink)">
+            <li>拡張を入れる（Chrome / Firefox ストア）</li>
+            <li>使いたい AI サービスの usage ページを開く</li>
+            <li>残枠の数字を <b>1 回クリック</b>して教える → 以降は自動</li>
+          </ol>
+        </div>
+        <div class="wf-placeholder">[ダッシュボード完成イメージ<br>（複数 AI の残枠が並ぶ静止画）]</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-block">[ボタン: Chrome ウェブストア]</div>
+        <div class="wf-block">[ボタン: Firefox AMO]</div>
+        <div class="wf-block">[リンク: GitHub リポ]</div>
+      </div>
+    </div>
+    <div class="wf-caption">このセクションで達成したいこと: 「まず何をすればいいか」に迷わせない。下の練習場へ自然にスクロールを誘導。</div>
+  </div>
+
+  <h3>状態一覧</h3>
+  <table>
+    <thead><tr><th style="width:12em">状態</th><th>表示内容</th></tr></thead>
+    <tbody>
+      <tr><td>初期表示</td><td>ダッシュボード完成イメージは静止画（1 枚）。GIF / 動画は使わない（ページ重量と ToS 配慮）。</td></tr>
+      <tr><td>拡張未インストール</td><td>「まず拡張を入れてください」の案内は<b>出さない</b>（未インストールでも読み物として通る作りにする）。</td></tr>
+      <tr><td>モバイル閲覧</td><td>3 ステップは縦積み、ボタン群は横スクロールではなく縦積み。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="s-02">S-02  teach-mode 練習場</h2>
+  <p>実サイトを使う前に、この場で「クリックして教える」体験を 1 回済ませて成功体験で終わらせる。ここで教えた対象は拡張の storage に保存されるので、次回このページを開いても数字が読み取れる = <b>拡張がちゃんと動いていることの証明</b>にもなる。</p>
+
+  <div class="mockup-note" style="border-color:var(--accent)">
+    <b>拡張が入っていないと動きません</b>: この練習場は many-ai-usage 拡張の teach-mode を起動して初めて機能します。まだの方はストアからどうぞ。
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <span class="wf-block" style="padding:6px 14px;font-size:0.9rem">[ボタン: Chrome ウェブストアで入手] → placeholder URL</span>
+      <span class="wf-block" style="padding:6px 14px;font-size:0.9rem">[ボタン: Firefox AMO で入手] → placeholder URL</span>
+    </div>
+  </div>
+
+  <div class="wf">
+    <div class="wf-frame" style="min-height:auto">
+      <div class="wf-header"><span>▤ Practice: 擬似 usage ページ</span><span class="tag">練習場</span></div>
+
+      <div class="wf-row">
+        <div class="fake-usage">
+          <h4>Model A · Weekly usage</h4>
+          <div class="fake-num" data-jitter="pct"><span data-num>62</span> %</div>
+          <div class="fake-bar"><span data-bar style="width:62%"></span></div>
+          <div class="fake-sub">Resets on 2026-07-22 09:00 JST</div>
+          <span class="clue" style="top:-10px;right:-6px">← ここをクリック</span>
+        </div>
+        <div class="fake-usage">
+          <h4>Model B · 5-hour window</h4>
+          <div class="fake-num" data-jitter="xy"><span data-num>18</span> / 40</div>
+          <div class="fake-bar"><span data-bar style="width:45%"></span></div>
+          <div class="fake-sub">Window ends in 2h 14m</div>
+        </div>
+        <div class="fake-usage">
+          <h4>Model C · Monthly cap</h4>
+          <div class="fake-num" data-jitter="money">$<span data-num>4.20</span> / $20.00</div>
+          <div class="fake-bar"><span data-bar style="width:21%"></span></div>
+          <div class="fake-sub">Resets on 2026-08-01</div>
+        </div>
+      </div>
+
+      <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+        <div style="font-family:var(--display);font-weight:700">手順</div>
+        <ol style="margin:6px 0 0 20px">
+          <li>ブラウザ右上の <b>many-ai-usage アイコン</b> をクリック → <b>「このページを教える」</b></li>
+          <li>ページ上の数字（例: <b>62 %</b>）にマウスを重ねると候補が薄オレンジで囲まれる</li>
+          <li>クリックして確定 → tooltip で「62 %」と読み取ったかプレビューが出る</li>
+          <li>ラベル（"Model A weekly" など）を付けて保存 → ダッシュボードに反映</li>
+        </ol>
+      </div>
+
+      <div class="wf-row">
+        <div class="wf-block">[ボタン: 拡張を開く（開発者向けメモ: <code>chrome.runtime.sendMessage</code> で teach-mode 起動）]</div>
+        <div class="wf-block">[リンク: うまくいかない時 → S-04 へ]</div>
+      </div>
+    </div>
+    <div class="wf-caption">このセクションで達成したいこと: teach の 1 サイクルを実サイト依存ゼロで通す。壊れないので永久に "動くお手本" として残る。</div>
+  </div>
+
+  <h3>決定事項（S-02）</h3>
+  <ul style="list-style:none;padding-left:0">
+    <li style="padding:6px 0;border-bottom:1px dashed var(--line)">✓ 擬似 usage カードの数字は <b><code>&lt;script&gt;</code> で 3 秒ごとにランダム揺らし</b>する（teach 後の再読取が体感できる = 拡張が動いている証明）</li>
+    <li style="padding:6px 0;border-bottom:1px dashed var(--line)">✓ 教える対象の型は <b>%・x / y 形式・金額</b> の 3 種を並置する（拡張パーサの回帰テストにもなる。上のカードがそのまま最終版）</li>
+    <li style="padding:6px 0;border-bottom:1px dashed var(--line)">✓ 未インストール導線: 練習場冒頭に「拡張が入っていないと動きません」の 1 行 + <b>Chrome / Firefox ストアのボタン 2 個</b>を添える（上のバナーがそれ）</li>
+  </ul>
+
+  <h2 id="s-03">S-03  実サイト向けレシピ集</h2>
+  <p>各 AI サービスの usage ページへの辿り方と、「どの数字を教えればいい？」の言葉ガイド。<b>実 URL・CSS selector・スクリーンショットは載せない</b>（サービス側の変更で腐る／同梱すると "公式サポート" と誤解される／商標・ToS リスク）。あくまで人間が読んで自力で辿れる粒度で。</p>
+
+  <div class="wf">
+    <div class="wf-frame" style="min-height:auto">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:14em">サービス</th>
+            <th style="width:20em">usage ページの辿り方</th>
+            <th>教える対象（言葉で）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Claude</b><br><span class="meta">Web / Claude Code CLI</span></td>
+            <td>claude.ai にログイン → 設定 → Usage（Plan &amp; billing）</td>
+            <td>「Weekly usage」の <b>％表示</b>、および「Resets on ○月○日」の日時。Claude Code CLI と Web は<b>同じサブスク枠を共有</b>する（CLI 側に単独 usage ページは無い）。</td>
+          </tr>
+          <tr>
+            <td><b>Codex CLI</b><br><span class="meta">ChatGPT サブスクを共有</span></td>
+            <td>chatgpt.com にログイン → 設定 → Manage subscription / Usage</td>
+            <td>Codex CLI は ChatGPT Plus / Pro / Team の枠を<b>CLI から消費</b>する。教える対象は Web ChatGPT の usage 側にある「5-hour window」の残数（例: 18 / 40）や、モデル別残メッセージ数。</td>
+          </tr>
+          <tr>
+            <td><b>Grok</b><br><span class="meta">xAI</span></td>
+            <td>grok.com にログイン → 設定 / Subscription</td>
+            <td>今週の残クレジット・残メッセージ数、または reset 日時。Premium / SuperGrok でプラン差あり。</td>
+          </tr>
+          <tr>
+            <td><b>GitHub Copilot</b></td>
+            <td>github.com → Settings → Copilot（Individual プランは個人設定側、Business は organization 側）</td>
+            <td>「Premium requests」の使用量 / 上限、reset 日。</td>
+          </tr>
+          <tr>
+            <td><b>Cursor</b></td>
+            <td>cursor.com にログイン → Settings → Usage</td>
+            <td>Fast requests の残数、Slow への切替タイミング。Pro / Business でプラン差あり。</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="meta" style="margin-top:12px"><b>対象外 (API 従量課金):</b> Anthropic Console API・OpenAI Platform API・xAI API 等の <b>API キー方式（従量課金）</b>は残高管理の対象外です。本拡張は <b>サブスクリプションの残枠管理</b>に絞っています。</p>
+    </div>
+    <div class="wf-caption">このセクションで達成したいこと: 「うちの契約プランではどこ？」を各サービスで自力で辿れるようにする。表は最終版でも「最終確認日: YYYY-MM-DD」バッジ付きにして腐り度を可視化する。</div>
+  </div>
+
+  <h3>状態一覧 / スコープ</h3>
+  <table>
+    <thead><tr><th style="width:12em">状態</th><th>表示内容</th></tr></thead>
+    <tbody>
+      <tr><td>辿り方が変わっていた</td><td>ページ末尾の GitHub Issue リンクで報告してもらう。<b>年 1〜2 回の見直し</b>を明記して "永久保守" と読まれないようにする。</td></tr>
+      <tr><td>プランを持っていない</td><td>「登録は残っているサービスだけで OK」= 全部揃える必要はないと明記。</td></tr>
+      <tr><td>ここに無い AI サービス</td><td>「teach-mode があるのでどんな usage ページでも自分で登録できます」 = むしろ拡張のセールスポイントとして誘導。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>決定事項（S-03）</h3>
+  <ul style="list-style:none;padding-left:0">
+    <li style="padding:6px 0;border-bottom:1px dashed var(--line)">✓ 実 URL は<b>埋めない</b>（腐るから）。「設定 → Usage を辿ってください」の言葉ガイドのみ。</li>
+    <li style="padding:6px 0;border-bottom:1px dashed var(--line)">✓ API 従量課金（Anthropic Console API / OpenAI Platform API / xAI API）は<b>対象外</b>と明記。表の下に注記を置く。</li>
+    <li style="padding:6px 0;border-bottom:1px dashed var(--line)">✓ 初回リリース掲載: <b>Claude / Codex CLI (ChatGPT 枠共有) / Grok / Copilot / Cursor の 5 サービス</b>（"MANY" を体現できる最小構成）。</li>
+    <li style="padding:6px 0;border-bottom:1px dashed var(--line)">✓ スクリーンショットは<b>載せない</b>（商標・ToS リスク）。この使い方ページ側は擬似 usage カードの HTML モックで済ませ、実サービス画面は言葉で誘導するだけ。</li>
+  </ul>
+
+  <div class="mockup-note" style="border-color:var(--bad)">
+    <b>拡張ソースコード側の宿題:</b> 現在の実装で拡張が v0.1 サンプルとして <b>Claude / Codex のプロバイダ定義を同梱</b>している場合、上のポリシー（<b>公式サポートに見えるものは同梱しない</b>）と整合しない可能性がある。使い方ページ本実装の前に、拡張本体の同梱プロバイダをどうするか（削除する / サンプルとして明示する / teach 済みの初期値として配る）を別途決める必要がある。
+  </div>
+
+  <h2 id="s-04">S-04  よくある質問 / 落とし穴</h2>
+  <div class="wf">
+    <div class="wf-frame" style="min-height:auto">
+      <div class="wf-row">
+        <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+          <div style="font-family:var(--display);font-weight:700">Q. usage の数字は外部（AI）に送られますか？</div>
+          <div style="color:var(--ink);margin-top:4px">A. いいえ。解析はブラウザ内のみで、ページ HTML を外部 AI に送りません。サーバー・アカウント・クラウド同期もありません。</div>
+        </div>
+        <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+          <div style="font-family:var(--display);font-weight:700">Q. 別 PC でも同じ設定を使いたい</div>
+          <div style="color:var(--ink);margin-top:4px">A. 現時点では同期しません（クラウド同期を持たないポリシー）。設定のエクスポート / インポート機能で移してください。</div>
+        </div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+          <div style="font-family:var(--display);font-weight:700">Q. サービス側の DOM が変わって読めなくなった</div>
+          <div style="color:var(--ink);margin-top:4px">A. 該当タイルの「再学習 (Re-teach)」から、新しい位置をもう一度クリックしてください。旧 fingerprint は自動失効します。</div>
+        </div>
+        <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+          <div style="font-family:var(--display);font-weight:700">Q. ログインしていない状態で読めますか？</div>
+          <div style="color:var(--ink);margin-top:4px">A. いいえ。各サービスの usage ページは要ログインです。この拡張はあなたの既存ブラウザセッションを読むだけで、代理ログインはしません。</div>
+        </div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+          <div style="font-family:var(--display);font-weight:700">Q. API キー方式（従量課金）の残高は？</div>
+          <div style="color:var(--ink);margin-top:4px">A. 現時点では対象外です。サブスクの残枠管理に焦点を絞っています。</div>
+        </div>
+        <div class="wf-block" style="border-style:solid;border-color:var(--ink)">
+          <div style="font-family:var(--display);font-weight:700">Q. うまく動かない</div>
+          <div style="color:var(--ink);margin-top:4px">A. GitHub Issue で報告してください（サービス名 / プラン種別 / スクショ）。selector 修正は<b>ユーザー側で完結</b>する設計なので、多くは Re-teach で解決します。</div>
+        </div>
+      </div>
+    </div>
+    <div class="wf-caption">このセクションで達成したいこと: 不安（プライバシー・壊れた時・別 PC）に先回りで答える。同時に「同梱プロバイダを持たない理由」を自然に伝える。</div>
+  </div>
+
+  <h2>ページ遷移 / ナビ</h2>
+  <div class="card">
+<pre style="font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.5;margin:0">
+[work.html?id=many-ai-usage]
+        │
+        │ 「使い方を見る →」
+        ▼
+[usage.html]  ── ページ内スクロール ──▶  S-01 ─▶ S-02 ─▶ S-03 ─▶ S-04
+                                                              │
+                                                              ├─▶ [Chrome ウェブストア]（外部）
+                                                              ├─▶ [Firefox AMO]（外部）
+                                                              └─▶ [GitHub Issue]（外部）
+</pre>
+  </div>
+
+  <h2>未決定事項（ページ全体）</h2>
+  <ul class="checklist">
+    <li>github.io の <b>既存ヘッダー / フッター（work.html と同じ nav + footer）</b>をそのまま流用するか、この使い方ページは <b>独立レイアウト</b> で行くか</li>
+    <li>ページ配置: <code>articles/many-ai-usage/usage.html</code> でよいか、<code>articles/2026/2026-07-XX_many-ai-usage-usage/</code> の articles 慣例に合わせるか（後者だと publish-article / articles.json 追跡に乗る）</li>
+    <li>英語版も同時に用意するか（work.html 側は EN 対応済み・使い方ページだけ日本語だと非対称）</li>
+    <li>「最終確認日: 2026-07-16」バッジをページ末尾に置き、レシピ集の腐り度を可視化するか</li>
+    <li>Chrome ウェブストア審査中は URL がまだ無い → その期間の <code>store</code> ボタンをどうするか（「審査中」バッジ？非表示？）</li>
+    <li><b>拡張本体側</b>: v0.1 サンプルの Claude / Codex 同梱プロバイダをどう扱うか（S-03 の "公式サポート同梱しない" ポリシーと整合させる）</li>
+  </ul>
+
+</div>
+<script>
+  // teach-mode 練習場（S-02）の擬似 usage カード: 3 秒ごとにランダム揺らし。
+  // teach 後の再読取が「動いている」ことを体感するためのモック挙動。
+  (function () {
+    const jitter = {
+      pct: () => {
+        const v = Math.floor(55 + Math.random() * 20); // 55–74
+        return { num: v + '', width: v + '%' };
+      },
+      xy: () => {
+        const v = Math.floor(15 + Math.random() * 15); // 15–29
+        return { num: v + '', width: Math.round((v / 40) * 100) + '%' };
+      },
+      money: () => {
+        const v = (3.5 + Math.random() * 4).toFixed(2); // $3.50–$7.50
+        return { num: v, width: Math.round((parseFloat(v) / 20) * 100) + '%' };
+      },
+    };
+    function tick() {
+      document.querySelectorAll('[data-jitter]').forEach((el) => {
+        const type = el.getAttribute('data-jitter');
+        if (!jitter[type]) return;
+        const { num, width } = jitter[type]();
+        const numEl = el.querySelector('[data-num]');
+        if (numEl) numEl.textContent = num;
+        const card = el.closest('.fake-usage');
+        if (card) {
+          const bar = card.querySelector('[data-bar]');
+          if (bar) bar.style.width = width;
+        }
+      });
+    }
+    setInterval(tick, 3000);
+  })();
+</script>
+</body>
+</html>
