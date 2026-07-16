@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<!--docsweep-meta
+type: design
+status: planned
+tags: [testing-guide, unpacked, many-ai-usage, v0.1.0]
+owner: ishizakahiroshi
+related: [plan_try-samples-onboarding.md, plan_teach-multi-metric-continuous.md, review_teach-mode-ux_2026-07-16.html]
+last_reviewed: 2026-07-16
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>many-ai-usage v0.1.0 unpacked 実機テストガイド — 2026-07-16</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f3ea; --ink:#241f1a; --ink-soft:#837a6c; --line:rgba(36,31,26,0.12);
+    --accent:#ff7a3d; --card:#fffdf8; --ok:#2e7d4f; --warn:#b8860b; --bad:#b3261e;
+    --display:'Baloo 2','Zen Maru Gothic',system-ui,cursive;
+    --body:'Zen Maru Gothic',system-ui,sans-serif;
+    --code:ui-monospace,"Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.75;font-size:16px;text-wrap:pretty}
+  .wrap{max-width:min(960px,92vw);margin:0 auto;padding:48px 0 96px}
+  h1{font-family:var(--display);font-weight:800;font-size:2rem;margin:0 0 12px;letter-spacing:-0.01em}
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:48px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+  h3{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:28px 0 10px}
+  p,li{font-size:1rem}
+  a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+  code{font-family:var(--code);background:#fffdf8;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:0.9rem}
+  pre{font-family:var(--code);background:#fffdf8;border:2px solid var(--ink);border-radius:10px;padding:14px 18px;overflow-x:auto;font-size:0.86rem;line-height:1.6}
+  .card{background:var(--card);border:2px solid var(--ink);border-radius:18px;padding:22px 26px;box-shadow:4px 5px 0 var(--line);margin:18px 0}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-family:var(--display);font-weight:700;font-size:0.78rem;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+  .tag-ok{background:var(--ok);color:#fff} .tag-warn{background:var(--warn);color:#fff}
+  .tag-bad{background:var(--bad);color:#fff} .tag-accent{background:var(--accent);color:#fff}
+  .system-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:2px solid var(--ink);background:var(--card);font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .system-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .meta{color:var(--ink-soft);font-size:0.88rem}
+  .header-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+  .tldr{background:var(--card);border-left:6px solid var(--accent);border-top:2px solid var(--ink);border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);border-radius:12px;padding:16px 22px;margin:12px 0 24px}
+  .tldr b{font-family:var(--display)}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);font-size:0.94rem;vertical-align:top}
+  th{background:#fffdf8;font-family:var(--display);font-weight:700}
+  tr:last-child td{border-bottom:0}
+
+  ol.steps{list-style:none;counter-reset:step;padding-left:0;margin:12px 0}
+  ol.steps > li{counter-increment:step;position:relative;padding:10px 0 10px 52px;border-bottom:1px dashed var(--line)}
+  ol.steps > li:last-child{border-bottom:0}
+  ol.steps > li::before{content:counter(step);position:absolute;left:0;top:12px;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;font-family:var(--display);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:0.94rem}
+  ol.steps b{font-family:var(--display)}
+  .hint{background:#fff7ea;border:1.5px dashed var(--warn);border-radius:10px;padding:10px 14px;margin:8px 0;font-size:0.92rem;color:var(--ink)}
+  .hint b{color:var(--warn);font-family:var(--display)}
+  .ng{background:#fff2f0;border:1.5px dashed var(--bad);border-radius:10px;padding:10px 14px;margin:8px 0;font-size:0.92rem;color:var(--ink)}
+  .ng b{color:var(--bad);font-family:var(--display)}
+
+  .scenario{background:var(--card);border:2px solid var(--ink);border-radius:18px;padding:20px 24px;margin:20px 0;box-shadow:4px 5px 0 var(--line)}
+  .scenario h3{margin-top:0;display:flex;align-items:center;gap:10px}
+  .scenario h3 .id{display:inline-block;background:var(--ink);color:#fff;padding:2px 10px;border-radius:8px;font-size:0.86rem;font-family:var(--display)}
+  .scenario .goal{font-size:0.9rem;color:var(--ink-soft);margin:4px 0 12px}
+  .checklist{list-style:none;padding-left:0;margin:8px 0}
+  .checklist li{padding:6px 0;border-bottom:1px dashed var(--line);font-size:0.94rem}
+  .checklist li:last-child{border-bottom:0}
+  .checklist li::before{content:"☐  ";font-family:var(--display);color:var(--ink)}
+  .expected{background:#f0f9f2;border:1.5px solid var(--ok);border-radius:10px;padding:10px 14px;margin:10px 0;font-size:0.92rem}
+  .expected b{color:var(--ok);font-family:var(--display)}
+
+  .kbd{display:inline-block;background:#fff;border:1.5px solid var(--ink);border-bottom-width:3px;border-radius:5px;padding:1px 7px;font-family:var(--code);font-size:0.86rem;line-height:1.4}
+
+  @media print{ body{background:#fff} .card,.scenario{box-shadow:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header-row">
+    <span class="system-badge"><span class="dot"></span>対象: <b>many-ai-usage v0.1.0</b>（Chrome / Firefox 拡張）</span>
+    <span class="tag tag-accent">unpacked テスト</span>
+    <span class="meta">2026-07-16 (木) 作成</span>
+  </div>
+  <h1>v0.1.0 unpacked 実機テストガイド</h1>
+
+  <div class="tldr">
+    <b>3 分でわかる TL;DR</b><br>
+    ローカルビルドした <code>dist/chrome</code> と <code>dist/firefox</code> を各ブラウザに「開発者モードで」読み込む。テストは 5 シナリオ（空状態 / Try samples / 冪等性 / teach-mode / 使い方ページ遷移）。teach-mode には <b>v0.1.0 時点の既知バグ 3 件</b>あり（別セッションで対応予定）。バグを踏まずに動作確認するのが目的。
+  </div>
+
+  <h2>1. 前提の確認</h2>
+  <div class="card">
+    <p>テストに入る前に以下 3 点を確認する。すべて既に済んでいるはずだが、環境が変わっているときは念のため。</p>
+    <table>
+      <thead><tr><th style="width:15em">確認事項</th><th>確認方法</th><th style="width:6em">状態</th></tr></thead>
+      <tbody>
+        <tr><td><b>ビルド成果物の存在</b></td><td><code>C:\dev\github\public\many-ai-usage\dist\chrome</code> と <code>dist\firefox</code> に <code>manifest.json</code> があること。無ければ <code>pnpm run build:chrome</code> / <code>pnpm run build:firefox</code> を実行</td><td><span class="tag tag-ok">✓</span></td></tr>
+        <tr><td><b>typecheck / test</b></td><td><code>pnpm run typecheck</code> と <code>pnpm test</code> が緑（24 tests / 6 test files）</td><td><span class="tag tag-ok">✓</span></td></tr>
+        <tr><td><b>Registry の公開</b></td><td><code>curl -I https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json</code> が <code>HTTP/2 200</code></td><td><span class="tag tag-ok">✓</span></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">全て ✓ になっていれば、拡張は Try samples の Remote Registry fetch を含めて完全に動く状態。</p>
+  </div>
+
+  <h2>2. Chrome への unpacked インストール</h2>
+  <div class="card">
+    <ol class="steps">
+      <li>アドレスバーに <code>chrome://extensions/</code> と入れて開く</li>
+      <li>右上の「<b>デベロッパー モード</b>」トグルを <b>ON</b>（青くなる）</li>
+      <li>左上に現れる「<b>パッケージ化されていない拡張機能を読み込む</b>」を押す</li>
+      <li>ファイル選択ダイアログで <code>C:\dev\github\public\many-ai-usage\dist\chrome</code> フォルダに<b>入って</b>、そのまま「フォルダーの選択」ボタンを押す<div class="hint"><b>迷いポイント:</b> ここは「フォルダの中に入って、フォルダ自体を選ぶ」動作。<br>❌ リポルート <code>C:\dev\github\public\many-ai-usage</code> を選ぶ → manifest 見つからず失敗<br>❌ <code>dist\chrome</code> の中の <code>manifest.json</code> を選ぶ（Firefox の作法と混同）→ ダイアログが閉じない<br>✅ <code>dist\chrome</code> フォルダを<b>選択状態</b>で「フォルダーの選択」</div></li>
+      <li>拡張カードが出て「many-ai-usage v0.1.0」が表示される。右上のパズルアイコン（拡張メニュー）に <b>M</b> か many-ai-usage のアイコンが並ぶ</li>
+      <li>拡張アイコンを右クリック →「拡張機能を固定」でツールバーに常駐させると以降が楽</li>
+    </ol>
+  </div>
+
+  <h2>3. Firefox への unpacked インストール</h2>
+  <div class="card">
+    <ol class="steps">
+      <li>アドレスバーに <code>about:debugging#/runtime/this-firefox</code> と入れて開く</li>
+      <li>「<b>一時的なアドオンを読み込む…</b>」ボタンを押す</li>
+      <li>ファイル選択ダイアログで <code>C:\dev\github\public\many-ai-usage\dist\firefox\manifest.json</code> を<b>選ぶ</b>（フォルダではなくファイルを選ぶ）<div class="hint"><b>Chrome との違い:</b> Firefox は <code>manifest.json</code> ファイルそのものを指定する。</div></li>
+      <li>拡張カードが出て「many-ai-usage 0.1.0」が表示される</li>
+    </ol>
+    <div class="ng"><b>注意:</b> Firefox の「一時的なアドオン」は<b>ブラウザを閉じると消える</b>。テストごとに再読込が要る。恒常的に使うなら AMO 提出後の署名付きパッケージを待つこと。</div>
+  </div>
+
+  <h2>4. テストシナリオ 5 種</h2>
+  <p>順番通り実行するのが推奨。T1 が終わってから T2 → T3 → T4 → T5。各シナリオの「成功基準」を満たしたら次へ。</p>
+
+  <div class="scenario">
+    <h3><span class="id">T1</span>空状態フロー</h3>
+    <div class="goal"><b>ねらい</b>: 初回起動時に「Try samples」ボタンが正しく出るか</div>
+    <ol class="steps">
+      <li>拡張アイコンをクリックして popup を開く</li>
+      <li>popup 全体を確認</li>
+    </ol>
+    <div class="hint"><b>providers が既に登録済みなら</b>: 別セッションのテストで残っている可能性。<code>chrome://extensions/</code> → many-ai-usage カードの「詳細」→ 一番下の「<b>拡張機能のデータを消去</b>」を押してから拡張アイコンを再クリック</div>
+    <div class="expected"><b>成功基準:</b>
+      <ul class="checklist">
+        <li>ヘッダ「many-ai-usage v0.1.0」</li>
+        <li>大きな文字で「<b>No providers yet</b>」</li>
+        <li>その下に「Try six URL-only samples, or add your own usage page.」</li>
+        <li>2 つのボタン: <b>「Try samples ▸」</b> と <b>「使い方を見る →」</b></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3><span class="id">T2</span>Try samples フロー（Remote Registry fetch）</h3>
+    <div class="goal"><b>ねらい</b>: 明示同意 → GitHub raw から 6 サービス取得 → storage に反映</div>
+    <ol class="steps">
+      <li>popup の「<b>Try samples ▸</b>」を押す</li>
+      <li>options タブが新規に開く（<code>options.html?trySamples=1</code>）</li>
+      <li>options 画面中央に確認ダイアログが出る</li>
+      <li>ダイアログの内容を確認: fetch URL が <code>https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json</code> であること + 「取得するのは表示名と URL パターンだけ」の説明</li>
+      <li>「<b>取得する</b>」ボタンを押す</li>
+      <li>数秒待つ（ネットワーク遅延次第）</li>
+    </ol>
+    <div class="expected"><b>成功基準:</b>
+      <ul class="checklist">
+        <li>ダイアログが閉じる</li>
+        <li>options の左サイドバーに 6 タイル: <b>Claude / Codex CLI / Grok / GitHub Copilot / Cursor / Ollama</b></li>
+        <li>各タイルは「Needs access」or「Not captured」表示（selector 未教示状態）</li>
+        <li>トースト:「Added 6 sample providers. Open each usage page and teach the visible value.」</li>
+      </ul>
+    </div>
+    <div class="ng"><b>失敗パターン:</b> ダイアログにエラー「Sample registry request failed (404)」→ providers.json が main に merge されていない。<code>gh pr list --repo ishizakahiroshi/many-ai-cli --state merged</code> で確認</div>
+  </div>
+
+  <div class="scenario">
+    <h3><span class="id">T3</span>Try samples の冪等性</h3>
+    <div class="goal"><b>ねらい</b>: 2 回目の Try samples でも既存 provider を上書きせず、重複追加もしないこと</div>
+    <ol class="steps">
+      <li>T2 が完了した状態のまま、options の左サイドバー最上部にある「<b>Need a starting point?</b>」ブロックに注目<div class="hint">Try samples の 6 個が既に登録されているので、通常この onboarding ブロックは<b>非表示になっているはず</b></div></li>
+      <li>もし onboarding ブロックが消えていることを確認したら、<b>URL 直打ち</b>で <code>chrome-extension://&lt;id&gt;/options.html?trySamples=1</code> を開いて強制的にダイアログを出す<div class="hint"><code>&lt;id&gt;</code> は <code>chrome://extensions/</code> の many-ai-usage カードで確認できる</div></li>
+      <li>「取得する」を押す</li>
+    </ol>
+    <div class="expected"><b>成功基準:</b>
+      <ul class="checklist">
+        <li>タイル数が 6 のまま増えない</li>
+        <li>トースト:「Sample providers are already registered. Existing settings were not changed.」</li>
+        <li>既存タイルの teach 済み設定（もしあれば）が保たれている</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3><span class="id">T4</span>teach-mode の基本フロー（<span class="tag tag-warn">既知バグあり</span>）</h3>
+    <div class="goal"><b>ねらい</b>: 1 provider を選んで 1 つの数値を teach、保存されるところまで確認</div>
+    <div class="ng"><b>先に既知バグを認識してから実施すること:</b><br>
+      ① <b>対象 usage ページを別タブで先に開く必要</b>（開いてないと picker が起動しない）<br>
+      ② <b>同じ URL のタブが 2+ 開いていると、意図しないタブに picker が飛ぶ</b><br>
+      ③ <b>picker の候補 tooltip が日付の「2026」を「2026%」と誤検出することがある</b>（クリックすれば正しい selector が保存されるので機能上は問題なし）
+    </div>
+    <ol class="steps">
+      <li>まず<b>他の Codex タブを全て閉じる</b>（同 URL タブ 1 個のみの状態を作る）</li>
+      <li>新規タブで <code>https://chatgpt.com/codex/cloud/settings/analytics#usage</code> を開いて ChatGPT にログイン</li>
+      <li>usage の「週間利用上限 X% 残り」が見える画面まで進む</li>
+      <li>拡張の options タブに戻る（<code>chrome://extensions/</code> → many-ai-usage →「オプション」or popup の ⚙ options から）</li>
+      <li>左サイドバーで <b>Codex CLI</b> を選択</li>
+      <li>右パネル下部の <b>「＋ Track this element」</b> ボタンを押す</li>
+      <li>Chrome が対象タブ（Codex usage）に自動で切り替わる</li>
+      <li>ページ上の数値要素にマウスを重ねると薄オレンジのハイライトが出る</li>
+      <li>「<b>X% 残り</b>」の数字部分をクリック<div class="hint">tooltip が「2026% · click to track」等になっていても、クリックした要素の selector が保存されるので機能的に問題ない。tooltip 誤検出の見た目は v0.1.1 で改善予定</div></li>
+      <li>picker が閉じ、options タブに自動で戻る</li>
+      <li>Codex CLI のタイルの「Tracked elements」に taught metric が 1 つ表示される</li>
+    </ol>
+    <div class="expected"><b>成功基準:</b>
+      <ul class="checklist">
+        <li>picker が対象タブに正しく出る（他のタブで反応しない）</li>
+        <li>クリックで metric が保存される</li>
+        <li>options の「Tracked elements」に metric label（例:「週間利用上限」等）+ 数値が表示される</li>
+        <li>popup を開くと Codex CLI タイルに数値が反映されている</li>
+      </ul>
+    </div>
+    <div class="hint"><b>複数 metric（例: 週間 + 残クレジット）を teach したい場合:</b> v0.1.0 では「＋ Track this element」を <b>metric の数だけ押す</b>必要がある。1 metric 教えたらまた options に戻って再度押す。v0.1.1 の Continuous mode 実装後は 1 セッションで連続 teach できる予定（<code>plan_teach-multi-metric-continuous.md</code> 参照）</div>
+  </div>
+
+  <div class="scenario">
+    <h3><span class="id">T5</span>使い方ページ遷移</h3>
+    <div class="goal"><b>ねらい</b>: popup / options の「使い方を見る →」リンクが正しく github.io に飛ぶ</div>
+    <ol class="steps">
+      <li>popup を開く（provider 空状態でも、6 個登録済み状態でも良い）</li>
+      <li>空状態なら「使い方を見る →」ボタン、登録済みなら options の「Try samples」onboarding 内のリンクを押す</li>
+    </ol>
+    <div class="expected"><b>成功基準:</b>
+      <ul class="checklist">
+        <li>新規タブが開いて <code>https://ishizakahiroshi.github.io/articles/many-ai-usage/usage.html</code> が表示される</li>
+        <li>ページが 404 でない</li>
+        <li>使い方ページの各セクションが崩れずに表示される</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>5. 成功基準まとめ</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:5em">ID</th><th>シナリオ</th><th style="width:8em">判定</th></tr></thead>
+      <tbody>
+        <tr><td><b>T1</b></td><td>空状態で「Try samples ▸」ボタンが出る</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T2</b></td><td>Try samples で 6 サービスが登録される</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T3</b></td><td>2 回目 Try samples は冪等（重複しない）</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T4</b></td><td>teach-mode で 1 metric 保存できる</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T5</b></td><td>使い方ページが 200 で開ける</td><td><span class="tag">☐ 未実施</span></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">Chrome と Firefox の両方で 5 シナリオ通ればストア提出フェーズに進める。1 つでも赤なら原因調査（下の 7. 参照）。</p>
+  </div>
+
+  <h2>6. 既知の問題（v0.1.0 の制約・v0.1.1 で対応予定）</h2>
+  <div class="card">
+    <p>いずれも <code>plan_teach-multi-metric-continuous.md</code> に反映済み。ストア提出時の submission notes では触れず、次バージョンで解消する方針。</p>
+    <table>
+      <thead><tr><th style="width:12em">問題</th><th>回避策 (v0.1.0)</th><th>解決策 (v0.1.1)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>同 URL タブが複数あると意図しないタブに picker が飛ぶ</b></td>
+          <td>古い方のタブを閉じてから Track this element を押す</td>
+          <td><b>案 D</b>: 拡張が常に <b>新規タブで provider URL を開く</b> → 曖昧性ゼロ</td>
+        </tr>
+        <tr>
+          <td><b>複数 metric を追跡したい時に Track this element を N 回押す必要</b></td>
+          <td>1 metric ずつ、options に戻って再度押す</td>
+          <td><b>Continuous picker mode</b>: 1 セッションで floating panel から連続 teach できる</td>
+        </tr>
+        <tr>
+          <td><b>picker tooltip が「2026%」と誤検出（日付の年号を数値扱い）</b></td>
+          <td>クリックすれば正しい selector は保存される（機能上は問題なし・見た目だけ変）</td>
+          <td><b>picker heuristic 改善</b>: 4桁年号除外・「%」記号近接優先・「リセット」文脈除外</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>7. 不具合が出た時のトラブルシュート</h2>
+  <div class="card">
+    <h3>拡張の Service Worker のログを見る（Chrome）</h3>
+    <ol class="steps">
+      <li><code>chrome://extensions/</code> を開く</li>
+      <li>many-ai-usage カードの中で「<b>Service worker</b>」というリンク（青字）をクリック</li>
+      <li>DevTools が開くので Console タブでエラーを確認</li>
+    </ol>
+    <div class="hint">Service worker が<b>非アクティブ</b>と表示される場合、拡張アイコンを 1 度クリックしてから再度リンクを探すと表示される</div>
+
+    <h3>Firefox 側の Console</h3>
+    <ol class="steps">
+      <li><code>about:debugging#/runtime/this-firefox</code> を開く</li>
+      <li>many-ai-usage の「<b>調査</b>」ボタン</li>
+      <li>DevTools の Console タブでエラーを確認</li>
+    </ol>
+
+    <h3>再現できたバグを Issue にする</h3>
+    <p>以下のテンプレで GitHub Issue に投げる:</p>
+    <pre>タイトル: [v0.1.0] &lt;短い症状&gt;
+
+環境:
+- ブラウザ: Chrome 130.0.x / Firefox 131.0.x
+- OS: Windows 11
+
+再現手順:
+1. ...
+2. ...
+3. ...
+
+期待する動作: ...
+実際の動作: ...
+
+Console のエラー（あれば）:
+```
+&lt;paste here&gt;
+```</pre>
+    <p>Issue リポ: <code>https://github.com/ishizakahiroshi/many-ai-usage/issues</code></p>
+  </div>
+
+  <h2>関連ドキュメント</h2>
+  <div class="card">
+    <ul>
+      <li><code>docs/local/plan_try-samples-onboarding.md</code> — v0.1.0 Try samples 実装の plan（進行中）</li>
+      <li><code>docs/local/plan_teach-multi-metric-continuous.md</code> — v0.1.1 teach-mode UX 改修の plan（次期実装）</li>
+      <li><code>docs/local/review_teach-mode-ux_2026-07-16.html</code> — 判断シート（Continuous mode 採用等の決定）</li>
+      <li><code>articles/many-ai-usage/usage.html</code>（github.io 上）— エンドユーザー向け使い方ページ</li>
+      <li><code>docs/store/submission-notes-v0.1.0.ja.md</code> — ストア審査担当者向け notes</li>
+    </ul>
+    <p class="meta">最終更新: 2026-07-16 (木) · 対象: many-ai-usage v0.1.0 · 環境: Windows 11 + Chrome / Firefox</p>
+  </div>
+
+</div>
+</body>
+</html>
