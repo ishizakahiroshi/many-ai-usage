@@ -88,7 +88,7 @@ docsweep_policy: archive_with_release
 
   <div class="tldr">
     <b>3 分でわかる TL;DR</b><br>
-    ローカルビルドした <code>dist/chrome</code> と <code>dist/firefox</code> を各ブラウザに「開発者モードで」読み込む。テストは 5 シナリオ（空状態 / Try samples / 冪等性 / teach-mode / 使い方ページ遷移）。teach-mode には <b>v0.1.0 時点の既知バグ 3 件</b>あり（別セッションで対応予定）。バグを踏まずに動作確認するのが目的。
+    ローカルビルドした <code>dist/chrome</code> と <code>dist/firefox</code> を各ブラウザに「開発者モードで」読み込む。テストは 5 シナリオ（空状態 / Try samples / 冪等性 / teach-mode / 使い方ページ遷移）。teach-mode は専用の新規タブと Continuous mode を使い、複数 metric とキャンセル時の全破棄まで確認する。
   </div>
 
   <h2>1. 前提の確認</h2>
@@ -189,35 +189,30 @@ docsweep_policy: archive_with_release
   </div>
 
   <div class="scenario">
-    <h3><span class="id">T4</span>teach-mode の基本フロー（<span class="tag tag-warn">既知バグあり</span>）</h3>
-    <div class="goal"><b>ねらい</b>: 1 provider を選んで 1 つの数値を teach、保存されるところまで確認</div>
-    <div class="ng"><b>先に既知バグを認識してから実施すること:</b><br>
-      ① <b>対象 usage ページを別タブで先に開く必要</b>（開いてないと picker が起動しない）<br>
-      ② <b>同じ URL のタブが 2+ 開いていると、意図しないタブに picker が飛ぶ</b><br>
-      ③ <b>picker の候補 tooltip が日付の「2026」を「2026%」と誤検出することがある</b>（クリックすれば正しい selector が保存されるので機能上は問題なし）
-    </div>
+    <h3><span class="id">T4</span>teach-mode Continuous flow</h3>
+    <div class="goal"><b>ねらい</b>: 専用の新規タブで複数 metric を連続 teach し、完了時にまとめて保存されることを確認</div>
     <ol class="steps">
-      <li>まず<b>他の Codex タブを全て閉じる</b>（同 URL タブ 1 個のみの状態を作る）</li>
-      <li>新規タブで <code>https://chatgpt.com/codex/cloud/settings/analytics#usage</code> を開いて ChatGPT にログイン</li>
-      <li>usage の「週間利用上限 X% 残り」が見える画面まで進む</li>
+      <li><code>https://chatgpt.com/codex/cloud/settings/analytics#usage</code> を同じウィンドウで 2 タブ開き、ChatGPT にログインしておく</li>
       <li>拡張の options タブに戻る（<code>chrome://extensions/</code> → many-ai-usage →「オプション」or popup の ⚙ options から）</li>
       <li>左サイドバーで <b>Codex CLI</b> を選択</li>
       <li>右パネル下部の <b>「＋ Track this element」</b> ボタンを押す</li>
-      <li>Chrome が対象タブ（Codex usage）に自動で切り替わる</li>
+      <li>Chrome が Codex usage を<b>3 個目の新規タブ</b>として開き、そのタブだけに picker を表示する</li>
       <li>ページ上の数値要素にマウスを重ねると薄オレンジのハイライトが出る</li>
-      <li>「<b>X% 残り</b>」の数字部分をクリック<div class="hint">tooltip が「2026% · click to track」等になっていても、クリックした要素の selector が保存されるので機能的に問題ない。tooltip 誤検出の見た目は v0.1.1 で改善予定</div></li>
-      <li>picker が閉じ、options タブに自動で戻る</li>
-      <li>Codex CLI のタイルの「Tracked elements」に taught metric が 1 つ表示される</li>
+      <li>「<b>X% 残り</b>」の数字部分をクリックし、右上 panel の Saved が 1 になる<div class="hint">日付の年号へマウスを重ねても「2026%」にならず、リセット文脈の数字は候補にならないことを確認する</div></li>
+      <li>続けて「<b>残りのクレジット</b>」をクリックし、Saved が 2 になる</li>
+      <li>panel の Rename で片方の名前を変更し、一覧へ反映されることを確認する</li>
+      <li><b>Done and return</b> を押し、新規 picker タブが閉じて options タブへ戻る</li>
+      <li>Codex CLI の「Tracked elements」に taught metric が 2 つ表示される</li>
     </ol>
     <div class="expected"><b>成功基準:</b>
       <ul class="checklist">
-        <li>picker が対象タブに正しく出る（他のタブで反応しない）</li>
-        <li>クリックで metric が保存される</li>
-        <li>options の「Tracked elements」に metric label（例:「週間利用上限」等）+ 数値が表示される</li>
-        <li>popup を開くと Codex CLI タイルに数値が反映されている</li>
+        <li>既存 2 タブではなく、新規の 3 個目のタブだけに picker が出る</li>
+        <li>percentage と credits の 2 metric を 1 セッションで保存できる</li>
+        <li>tooltip が年号を usage 値として表示しない</li>
+        <li>options の「Tracked elements」と popup に 2 metric が反映される</li>
       </ul>
     </div>
-    <div class="hint"><b>複数 metric（例: 週間 + 残クレジット）を teach したい場合:</b> v0.1.0 では「＋ Track this element」を <b>metric の数だけ押す</b>必要がある。1 metric 教えたらまた options に戻って再度押す。v0.1.1 の Continuous mode 実装後は 1 セッションで連続 teach できる予定（<code>plan_teach-multi-metric-continuous.md</code> 参照）</div>
+    <div class="hint"><b>キャンセル確認:</b> もう一度 Track this element を開始して 1 metric を選び、Esc を押す。options に戻った後、Tracked elements が増えていなければ全破棄も成功。</div>
   </div>
 
   <div class="scenario">
@@ -244,39 +239,14 @@ docsweep_policy: archive_with_release
         <tr><td><b>T1</b></td><td>空状態で「Try samples ▸」ボタンが出る</td><td><span class="tag">☐ 未実施</span></td></tr>
         <tr><td><b>T2</b></td><td>Try samples で 6 サービスが登録される</td><td><span class="tag">☐ 未実施</span></td></tr>
         <tr><td><b>T3</b></td><td>2 回目 Try samples は冪等（重複しない）</td><td><span class="tag">☐ 未実施</span></td></tr>
-        <tr><td><b>T4</b></td><td>teach-mode で 1 metric 保存できる</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T4</b></td><td>新規タブの Continuous mode で 2 metric 保存できる</td><td><span class="tag">☐ 未実施</span></td></tr>
         <tr><td><b>T5</b></td><td>使い方ページが 200 で開ける</td><td><span class="tag">☐ 未実施</span></td></tr>
       </tbody>
     </table>
-    <p class="meta">Chrome と Firefox の両方で 5 シナリオ通ればストア提出フェーズに進める。1 つでも赤なら原因調査（下の 7. 参照）。</p>
+    <p class="meta">Chrome と Firefox の両方で 5 シナリオ通ればストア提出フェーズに進める。1 つでも赤なら原因調査（下の 6. 参照）。</p>
   </div>
 
-  <h2>6. 既知の問題（v0.1.0 の制約・v0.1.1 で対応予定）</h2>
-  <div class="card">
-    <p>いずれも <code>plan_teach-multi-metric-continuous.md</code> に反映済み。ストア提出時の submission notes では触れず、次バージョンで解消する方針。</p>
-    <table>
-      <thead><tr><th style="width:12em">問題</th><th>回避策 (v0.1.0)</th><th>解決策 (v0.1.1)</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><b>同 URL タブが複数あると意図しないタブに picker が飛ぶ</b></td>
-          <td>古い方のタブを閉じてから Track this element を押す</td>
-          <td><b>案 D</b>: 拡張が常に <b>新規タブで provider URL を開く</b> → 曖昧性ゼロ</td>
-        </tr>
-        <tr>
-          <td><b>複数 metric を追跡したい時に Track this element を N 回押す必要</b></td>
-          <td>1 metric ずつ、options に戻って再度押す</td>
-          <td><b>Continuous picker mode</b>: 1 セッションで floating panel から連続 teach できる</td>
-        </tr>
-        <tr>
-          <td><b>picker tooltip が「2026%」と誤検出（日付の年号を数値扱い）</b></td>
-          <td>クリックすれば正しい selector は保存される（機能上は問題なし・見た目だけ変）</td>
-          <td><b>picker heuristic 改善</b>: 4桁年号除外・「%」記号近接優先・「リセット」文脈除外</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <h2>7. 不具合が出た時のトラブルシュート</h2>
+  <h2>6. 不具合が出た時のトラブルシュート</h2>
   <div class="card">
     <h3>拡張の Service Worker のログを見る（Chrome）</h3>
     <ol class="steps">

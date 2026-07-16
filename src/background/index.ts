@@ -1,6 +1,5 @@
 import type { RuntimeMessage, ProviderContext } from '../shared/messages';
-import { sendMessage } from '../shared/runtime';
-import { isStale, makeRuntimeState, type ProviderConfig, type ProviderRuntimeState } from '../shared/schema';
+import { isStale, makeRuntimeState, type ProviderConfig, type ProviderRuntimeState, type TaughtMetric } from '../shared/schema';
 import {
   deleteProvider,
   clearSnapshot,
@@ -17,7 +16,11 @@ import {
 import { matchesProviderUrl, originPattern, sameOriginAndPath } from '../shared/url';
 
 const pendingRefreshes = new Map<string, number>();
-const pendingPickers = new Map<number, { providerId: string; metricId?: string }>();
+type PickerMode = 'metrics' | 'reset';
+type TeachSession = { providerId: string; returnTabId?: number; metricId?: string; pickerMode: PickerMode; metrics: TaughtMetric[] };
+
+const pendingPickers = new Map<number, Omit<TeachSession, 'metrics'>>();
+const teachSessions = new Map<number, TeachSession>();
 const injectionInFlight = new Set<string>();
 
 async function hasPermission(provider: ProviderConfig): Promise<boolean> {
@@ -133,28 +136,45 @@ async function refreshProvider(providerId: string): Promise<{ started: boolean; 
   return { started: created.id != null, tabId: created.id };
 }
 
-async function startPicker(providerId: string, metricId?: string): Promise<{ started: boolean; tabId?: number }> {
+export async function startPicker(providerId: string, metricId?: string, sender?: chrome.runtime.MessageSender, pickerMode: PickerMode = 'metrics'): Promise<{ started: boolean; tabId?: number }> {
   const provider = await getProvider(providerId);
   if (!provider) return { started: false };
-  const tab = await findMatchingTab(provider);
-  if (tab?.id != null) {
-    pendingPickers.set(tab.id, { providerId, metricId });
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: 'START_PICKER', providerId, metricId });
-    } catch {
-      await injectCapture(tab.id, provider);
-      try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'START_PICKER', providerId, metricId });
-      } catch {
-        pendingPickers.delete(tab.id);
-        return { started: false, tabId: tab.id };
-      }
-    }
-    return { started: true, tabId: tab.id };
-  }
+  if (!(await hasPermission(provider))) return { started: false };
+  const active = sender?.tab?.id != null ? sender.tab : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
   const created = await chrome.tabs.create({ url: provider.url, active: true });
-  if (created.id != null) pendingPickers.set(created.id, { providerId, metricId });
+  if (created.id != null) pendingPickers.set(created.id, { providerId, metricId, returnTabId: active?.id, pickerMode });
   return { started: created.id != null, tabId: created.id };
+}
+
+function stagedSession(message: { providerId: string }, sender?: chrome.runtime.MessageSender) {
+  const tabId = sender?.tab?.id;
+  if (tabId == null) return null;
+  const session = teachSessions.get(tabId);
+  return session?.providerId === message.providerId ? { tabId, session } : null;
+}
+
+async function restoreTeachOrigin(tabId: number, returnTabId?: number): Promise<void> {
+  try { await chrome.tabs.remove(tabId); } catch { /* The user may already have closed the picker tab. */ }
+  if (returnTabId != null) {
+    try { await chrome.tabs.update(returnTabId, { active: true }); } catch { /* The originating tab may no longer exist. */ }
+  }
+}
+
+async function saveCompletedTeach(tabId: number, session: TeachSession): Promise<boolean> {
+  const provider = await getProvider(session.providerId);
+  if (!provider || session.metrics.length === 0) return false;
+  const metrics = [...provider.metrics];
+  for (const staged of session.metrics) {
+    const index = metrics.findIndex((metric) => metric.metricId === staged.metricId || metric.label === staged.label);
+    if (index >= 0) metrics[index] = { ...staged, metricId: metrics[index].metricId };
+    else metrics.push(staged);
+  }
+  const now = new Date().toISOString();
+  await upsertProvider({ ...provider, mode: 'taught', metrics, updatedAt: now });
+  const state = await getRuntimeState(provider.id);
+  await setRuntimeState({ ...state, status: 'never_seen', confidence: 'taught', errorLabel: null, consecutiveFailures: 0 });
+  try { await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW' }); } catch { /* The next visit/manual refresh will capture it. */ }
+  return true;
 }
 
 async function requestPermission(providerId: string): Promise<{ granted: boolean }> {
@@ -182,7 +202,7 @@ async function syncPermission(providerId: string, granted: boolean): Promise<voi
   });
 }
 
-async function handleMessage(message: RuntimeMessage, sender?: chrome.runtime.MessageSender): Promise<unknown> {
+export async function handleMessage(message: RuntimeMessage, sender?: chrome.runtime.MessageSender): Promise<unknown> {
   switch (message.type) {
     case 'GET_DASHBOARD': {
       const dashboard = await getDashboard();
@@ -242,26 +262,79 @@ async function handleMessage(message: RuntimeMessage, sender?: chrome.runtime.Me
       await reorderProviders(message.ids);
       return { reordered: true };
     case 'START_PICKER':
-      return startPicker(message.providerId, message.metricId);
-    case 'SAVE_TAUGHT_METRIC': {
+      return startPicker(message.providerId, message.metricId, sender, message.pickerMode);
+    case 'SAVE_METRIC': {
+      const staged = stagedSession(message, sender);
+      if (!staged) return { saved: false, metrics: [] };
+      const index = staged.session.metrics.findIndex((metric) => metric.metricId === message.metric.metricId);
+      if (index >= 0) staged.session.metrics[index] = message.metric;
+      else staged.session.metrics.push(message.metric);
+      return { saved: true, metrics: staged.session.metrics };
+    }
+    case 'SAVE_RESET_ANCHOR': {
+      const staged = stagedSession(message, sender);
+      if (!staged || staged.session.pickerMode !== 'reset' || staged.session.metricId !== message.metricId) return { saved: false, metrics: [] };
       const provider = await getProvider(message.providerId);
-      if (!provider) return { saved: false };
-      const existingIndex = provider.metrics.findIndex((metric) => metric.metricId === message.metric.metricId || metric.label === message.metric.label);
-      const metrics = existingIndex >= 0
-        ? provider.metrics.map((metric, index) => index === existingIndex ? { ...message.metric, metricId: metric.metricId } : metric)
-        : [...provider.metrics, message.metric];
-      const now = new Date().toISOString();
-      await upsertProvider({ ...provider, mode: 'taught', metrics, updatedAt: now });
-      const state = await getRuntimeState(provider.id);
-      await setRuntimeState({ ...state, status: 'never_seen', confidence: 'taught', errorLabel: null, consecutiveFailures: 0 });
-      if (sender?.tab?.id != null) {
-        try {
-          await chrome.tabs.sendMessage(sender.tab.id, { type: 'CAPTURE_NOW' });
-        } catch {
-          // The picker tab may have navigated; the next visit/manual refresh will capture it.
-        }
+      const existing = provider?.metrics.find((metric) => metric.metricId === message.metricId);
+      if (!existing) return { saved: false, metrics: [] };
+      staged.session.metrics = [{ ...existing, resetAnchor: message.resetAnchor }];
+      teachSessions.set(staged.tabId, staged.session);
+      return { saved: true, metrics: staged.session.metrics };
+    }
+    case 'RENAME_METRIC': {
+      const staged = stagedSession(message, sender);
+      const label = message.label.trim().slice(0, 80);
+      if (!label) return { renamed: false, metrics: staged?.session.metrics ?? [] };
+      if (staged) {
+        staged.session.metrics = staged.session.metrics.map((metric) => metric.metricId === message.metricId ? { ...metric, label, windowLabel: label } : metric);
+        teachSessions.set(staged.tabId, staged.session);
+        return { renamed: true, metrics: staged.session.metrics };
       }
+      const provider = await getProvider(message.providerId);
+      if (!provider || !provider.metrics.some((metric) => metric.metricId === message.metricId)) return { renamed: false, metrics: [] };
+      const metrics = provider.metrics.map((metric) => metric.metricId === message.metricId ? { ...metric, label, windowLabel: label } : metric);
+      await upsertProvider({ ...provider, metrics, updatedAt: new Date().toISOString() });
+      const snapshot = await getSnapshot(provider.id);
+      if (snapshot) {
+        await setSnapshot({
+          ...snapshot,
+          metrics: snapshot.metrics.map((metric) => metric.id === message.metricId ? { ...metric, label, window: { ...metric.window, label } } : metric),
+        });
+      }
+      return { renamed: true, metrics };
+    }
+    case 'REMOVE_METRIC': {
+      const staged = stagedSession(message, sender);
+      if (staged) {
+        staged.session.metrics = staged.session.metrics.filter((metric) => metric.metricId !== message.metricId);
+        teachSessions.set(staged.tabId, staged.session);
+        return { removed: true, metrics: staged.session.metrics };
+      }
+      const provider = await getProvider(message.providerId);
+      if (!provider) return { removed: false };
+      const metrics = provider.metrics.filter((metric) => metric.metricId !== message.metricId);
+      if (metrics.length === provider.metrics.length) return { removed: false };
+      await upsertProvider({ ...provider, metrics, updatedAt: new Date().toISOString() });
+      await clearSnapshot(provider.id);
+      const state = await getRuntimeState(provider.id);
+      await setRuntimeState({ ...state, status: 'never_seen', errorLabel: null });
+      return { removed: true };
+    }
+    case 'DONE_TEACH': {
+      const staged = stagedSession(message, sender);
+      if (!staged) return { saved: false };
+      const saved = await saveCompletedTeach(staged.tabId, staged.session);
+      if (!saved) return { saved: false };
+      teachSessions.delete(staged.tabId);
+      await restoreTeachOrigin(staged.tabId, staged.session.returnTabId);
       return { saved: true };
+    }
+    case 'CANCEL_TEACH': {
+      const staged = stagedSession(message, sender);
+      if (!staged) return { cancelled: false };
+      teachSessions.delete(staged.tabId);
+      await restoreTeachOrigin(staged.tabId, staged.session.returnTabId);
+      return { cancelled: true };
     }
     case 'CAPTURE_NOW':
       if (sender?.tab?.id == null) return { ok: false };
@@ -293,7 +366,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       const pendingPicker = pendingPickers.get(tabId);
       if (pendingPicker?.providerId === provider.id) {
         pendingPickers.delete(tabId);
-        try { await chrome.tabs.sendMessage(tabId, { type: 'START_PICKER', providerId: provider.id, metricId: pendingPicker.metricId }); } catch { /* tab may still be initializing */ }
+        teachSessions.set(tabId, { providerId: provider.id, returnTabId: pendingPicker.returnTabId, metricId: pendingPicker.metricId, pickerMode: pendingPicker.pickerMode, metrics: [] });
+        try {
+          await chrome.tabs.sendMessage(tabId, { type: 'START_PICKER', providerId: provider.id, metricId: pendingPicker.metricId, pickerMode: pendingPicker.pickerMode });
+        } catch {
+          teachSessions.delete(tabId);
+        }
       }
       if (pendingRefreshes.get(provider.id) === tabId) pendingRefreshes.delete(provider.id);
     }
@@ -302,6 +380,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   pendingPickers.delete(tabId);
+  teachSessions.delete(tabId);
   for (const [providerId, pendingTabId] of pendingRefreshes) {
     if (pendingTabId !== tabId) continue;
     pendingRefreshes.delete(providerId);

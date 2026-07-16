@@ -1,4 +1,4 @@
-import type { NormalizedSnapshot, ProviderConfig, TaughtMetric } from './schema';
+import type { AnchorFingerprint, NormalizedSnapshot, ProviderConfig, TaughtMetric } from './schema';
 
 export type RuntimeMessage =
   | { type: 'GET_DASHBOARD' }
@@ -13,8 +13,13 @@ export type RuntimeMessage =
   | { type: 'UPSERT_PROVIDER'; provider: ProviderConfig; permissionGranted: boolean }
   | { type: 'DELETE_PROVIDER'; providerId: string }
   | { type: 'REORDER_PROVIDERS'; ids: string[] }
-  | { type: 'START_PICKER'; providerId: string; metricId?: string }
-  | { type: 'SAVE_TAUGHT_METRIC'; providerId: string; metric: TaughtMetric };
+  | { type: 'START_PICKER'; providerId: string; metricId?: string; pickerMode?: 'metrics' | 'reset' }
+  | { type: 'SAVE_METRIC'; providerId: string; metric: TaughtMetric }
+  | { type: 'SAVE_RESET_ANCHOR'; providerId: string; metricId: string; resetAnchor: AnchorFingerprint }
+  | { type: 'RENAME_METRIC'; providerId: string; metricId: string; label: string }
+  | { type: 'REMOVE_METRIC'; providerId: string; metricId: string }
+  | { type: 'DONE_TEACH'; providerId: string }
+  | { type: 'CANCEL_TEACH'; providerId: string };
 
 export interface ProviderContext {
   provider: ProviderConfig;

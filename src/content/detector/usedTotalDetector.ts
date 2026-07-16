@@ -1,6 +1,6 @@
 import { quotaWords, usedWords } from './i18n/labels';
 import type { DetectorCandidate } from './types';
-import { allElements, contextMeta, nearbyContext, numberValue } from './utils';
+import { allElements, contextMeta, isLikelyYear, isResetDateMatch, nearbyContext, numberValue } from './utils';
 
 export function detectUsedTotal(document: Document): DetectorCandidate[] {
   const candidates: DetectorCandidate[] = [];
@@ -11,7 +11,7 @@ export function detectUsedTotal(document: Document): DetectorCandidate[] {
     for (const match of matches) {
       const used = numberValue(match[1]);
       const total = numberValue(match[2]);
-      if (used == null || total == null || total <= 0 || used > total) continue;
+      if (used == null || total == null || total <= 0 || used > total || isLikelyYear(used, match[1]) || isLikelyYear(total, match[2]) || isResetDateMatch(context, match.index ?? 0, match[0])) continue;
       const key = `${used}/${total}:${context}`;
       if (seen.has(key)) continue;
       seen.add(key);

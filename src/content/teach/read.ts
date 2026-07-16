@@ -1,6 +1,7 @@
 import type { NormalizedMetric, NormalizedSnapshot, ProviderConfig, TaughtMetric } from '../../shared/schema';
 import { extractValue, type ExtractedValue } from './extract';
 import { findByFingerprint } from './selector';
+import { parseResetText } from './reset';
 
 export function resolveTaughtElement(document: Document, metric: TaughtMetric): Element | null {
   const anchor = metric.valueAnchor;
@@ -11,6 +12,18 @@ export function resolveTaughtElement(document: Document, metric: TaughtMetric): 
       if (element) return element;
     } catch {
       // A stale selector is expected after a page redesign; try the fingerprint below.
+    }
+  }
+  return findByFingerprint(document, anchor);
+}
+
+function resolveAnchor(document: Document, anchor: NonNullable<TaughtMetric['resetAnchor']>): Element | null {
+  for (const selector of anchor.selectors) {
+    try {
+      const element = document.querySelector(selector);
+      if (element) return element;
+    } catch {
+      // Fall back to the fingerprint when a selector no longer parses or matches.
     }
   }
   return findByFingerprint(document, anchor);
@@ -41,6 +54,8 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
     }
     const values = normalizedValues(taught, extracted);
     const unit = taught.unit === 'custom' ? extracted.unit : taught.unit;
+    const resetElement = taught.resetAnchor ? resolveAnchor(document, taught.resetAnchor) : null;
+    const resetLabel = resetElement?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 180) ?? null;
     metrics.push({
       id: taught.metricId,
       label: taught.label,
@@ -48,10 +63,10 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
       unit,
       window: { id: taught.metricId, label: taught.windowLabel ?? taught.label },
       ...values,
-      resetAt: null,
-      resetLabel: null,
+      resetAt: resetLabel ? parseResetText(resetLabel, now) : null,
+      resetLabel,
       confidence: 'taught',
-      evidence: { value: extracted.evidence, label: taught.label, reset: null, semanticSignals: extracted.semanticSignals },
+      evidence: { value: extracted.evidence, label: taught.label, reset: resetLabel, semanticSignals: extracted.semanticSignals },
     });
   }
   const capturedAt = new Date(now).toISOString();

@@ -1,6 +1,6 @@
 ---
 type: plan
-status: planned
+status: in-progress
 tags: [v0.1.0, teach-mode-hardening, blocker, release]
 owner: ishizakahiroshi
 review_status: draft
@@ -9,7 +9,17 @@ last_reviewed: 2026-07-16
 due: 2026-07-23
 ---
 
-# plan: v0.1.0 teach-mode hardening — 既知バグ 3 件を v0.1.0 出荷前に潰す
+# plan: [本体・文書実装済み / 実機検証待ち] v0.1.0 teach-mode hardening — 既知バグ 3 件を v0.1.0 出荷前に潰す
+
+## 2026-07-16 実施状況
+
+- 完了: 新規タブ picker、Continuous mode、セッション単位の Done/Cancel、metric rename/remove、reset 自動推測・個別 re-teach
+- 完了: 年号・reset 日付除外、percentage / 単位付き候補の優先、tooltip 表示改善
+- 完了: 単体テスト 36 件、TypeScript typecheck、リリース文書、store 文書、テストガイド、github.io の S-02 更新
+- 未実施: リポジトリ規約で禁止されている build / commit / push / tag
+- 未実施: 更新 build を読み込んだ Chrome / Firefox unpacked T1〜T5 実機試験（人手ブラウザ操作が必要）
+
+完了条件のうち実機試験とタグ作成が残るため、frontmatter と H1 は `done` / `[完了]` にしない。
 
 ## 背景
 

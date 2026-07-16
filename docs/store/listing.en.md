@@ -10,12 +10,13 @@ See AI service usage in one browser-local dashboard without uploading your data.
 
 ## Detailed description
 
-many-ai-usage reads the visible value that you choose on a registered usage page and brings several services into one small dashboard. Teach a value once with “Track this element”; later visits read that same value locally.
+many-ai-usage reads the visible values that you choose on a registered usage page and brings several services into one small dashboard. Teach the values you need with “Track this element”; later visits read those same values locally.
 
 Key features:
 
 - Start empty, or explicitly fetch six URL-only examples with Try samples
-- Teach a visible usage value with one click
+- Open a dedicated picker tab and teach multiple visible usage values in one continuous session
+- Rename or remove individual metrics and automatically associate nearby reset labels
 - Re-find the value after page changes using a selector and fingerprint
 - Show a Re-teach prompt after three consecutive read failures
 - Keep un-taught pages as link tiles instead of guessing values

@@ -34,6 +34,16 @@ export function numberValue(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+export function isLikelyYear(value: number | null, raw: string): boolean {
+  return value != null && /^\d{4}$/.test(raw.replace(/,/g, '')) && value >= 1900 && value <= 2100;
+}
+
+export function isResetDateMatch(context: string, start: number, raw: string): boolean {
+  const nearby = context.slice(Math.max(0, start - 40), start + raw.length + 20);
+  return /(?:\b(?:reset|resets|renew|renews)\b|リセット|更新|下次)/i.test(nearby)
+    && /\d{4}[\/.\-]\d{1,2}(?:[\/.\-]\d{1,2})?/.test(nearby);
+}
+
 export function contextMeta(context: string) {
   return {
     label: context.slice(0, 120) || null,

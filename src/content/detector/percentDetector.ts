@@ -1,6 +1,6 @@
 import { remainingWords, usedWords } from './i18n/labels';
 import type { DetectorCandidate } from './types';
-import { allElements, contextMeta, nearbyContext, numberValue } from './utils';
+import { allElements, contextMeta, isLikelyYear, isResetDateMatch, nearbyContext, numberValue } from './utils';
 
 export function detectPercent(document: Document): DetectorCandidate[] {
   const candidates: DetectorCandidate[] = [];
@@ -10,7 +10,7 @@ export function detectPercent(document: Document): DetectorCandidate[] {
     const regex = /(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%/g;
     for (const match of context.matchAll(regex)) {
       const value = numberValue(match[1]);
-      if (value == null || value < 0 || value > 100) continue;
+      if (value == null || value < 0 || value > 100 || isLikelyYear(value, match[1]) || isResetDateMatch(context, match.index ?? 0, match[0])) continue;
       const key = `${value}:${context}`;
       if (seen.has(key)) continue;
       seen.add(key);

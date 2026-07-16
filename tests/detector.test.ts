@@ -47,4 +47,16 @@ describe('local usage detector', () => {
     expect(snapshot.metrics.length).toBeGreaterThan(0);
     expect(snapshot.metrics[0].remaining).toBe(32);
   });
+
+  it('does not turn a four-digit year or reset date into a usage candidate', () => {
+    const snapshot = detectUsage(page('<section><h2>更新予定</h2><p>リセット: 2026/07/22</p></section>'), 'fixture:reset-only', 'Synthetic AI');
+    expect(snapshot.source).toBe('page_only');
+    expect(snapshot.metrics).toHaveLength(0);
+  });
+
+  it('keeps percent and unit-bearing quota candidates ahead of reset-date noise', () => {
+    const snapshot = detectUsage(page('<section><h2>Weekly quota</h2><p>62% remaining</p><p>18 / 40 requests used</p><p>Resets: 2026/07/22</p></section>'), 'fixture:priority', 'Synthetic AI');
+    expect(snapshot.metrics[0].unit).toBe('percent');
+    expect(snapshot.metrics.some((metric) => metric.unit === 'requests' && metric.used === 18 && metric.total === 40)).toBe(true);
+  });
 });

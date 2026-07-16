@@ -87,7 +87,8 @@ async function capture(force = false): Promise<void> {
 chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
   if (message.type === 'START_PICKER' && 'providerId' in message) {
     const metricId = 'metricId' in message && typeof message.metricId === 'string' ? message.metricId : undefined;
-    startPicker(String(message.providerId), metricId);
+    const pickerMode = 'pickerMode' in message && message.pickerMode === 'reset' ? 'reset' : 'metrics';
+    startPicker(String(message.providerId), metricId, pickerMode);
     sendResponse({ ok: true });
     return false;
   }

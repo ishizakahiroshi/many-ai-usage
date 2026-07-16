@@ -12,7 +12,11 @@ due: 2026-07-23
 > **2026-07-16 昇格**: 本 plan の内容を v0.1.0 リリース前に取り込むことに変更（当初は v0.1.1 予定）。統合先: `plan_teach-hardening-v0.1.0.md`。本 md は「変更範囲 A〜C の実装詳細（14 ステップ）」の正典として維持し、リリース周りの追加ステップは統合先で管理する。
 > 判断シート `review_teach-mode-ux_2026-07-16.html` で決定: (A1) Continuous mode 採用 / (B1) reset anchor は自動推測 / (C1) picker "2026%" 誤検出 fix を本 plan に含める。
 
-# plan: teach-mode 刷新 — 新規タブで開いて Continuous mode で複数 metric を一気に teach
+# plan: [本体・文書実装済み / 実機検証待ち → v0.1.0 hardening] teach-mode 刷新 — 新規タブで開いて Continuous mode で複数 metric を一気に teach
+
+## 2026-07-16 実施状況
+
+実装・自動テスト・関連文書更新は `plan_teach-hardening-v0.1.0.md` の実施セッションで完了。Chrome / Firefox unpacked 実機試験、build、commit、tag が未実施のため、統合先の完了条件を満たすまでは `status: in-progress` を維持する。
 
 ## 背景
 
