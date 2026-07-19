@@ -44,4 +44,14 @@ Suggested category: Productivity
 
 These images are synthetic-data screenshots generated from `docs/local/design_teach-mode-store-screens_2026-07-14.html`. They contain no real service UI, logos, or account information.
 
-Privacy policy: `docs/privacy-policy.html`
+## Store listing URLs (fill in the developer console)
+
+- Homepage: `https://github.com/ishizakahiroshi/many-ai-usage` (or `https://ishizakahiroshi.com/work.html?id=many-ai-usage`)
+- Support: `https://ishizakahiroshi.com/articles/many-ai-usage/support.html`
+- Privacy policy: publish `docs/privacy-policy.html` and paste that public URL (see submission notes)
+- Usage guide: `https://ishizakahiroshi.com/articles/many-ai-usage/usage.html`
+
+## Support operations (short)
+
+- Chrome Web Store reviews are public ratings, not a bug tracker. Reply briefly and point users to Support URL / extension Report / GitHub Issues.
+- Do not ask users to paste cookies, tokens, account emails, raw HTML, or real usage numbers.

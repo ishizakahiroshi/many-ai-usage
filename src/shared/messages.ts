@@ -9,7 +9,7 @@ export type RuntimeMessage =
   | { type: 'CAPTURE_NOW'; force?: boolean }
   | { type: 'REFRESH_PROVIDER'; providerId: string }
   | { type: 'OPEN_PROVIDER'; providerId: string }
-  | { type: 'OPEN_OPTIONS' }
+  | { type: 'OPEN_OPTIONS'; providerId?: string }
   | { type: 'REQUEST_PERMISSION'; providerId: string }
   | { type: 'SYNC_PERMISSION'; providerId: string; granted: boolean }
   | { type: 'UPSERT_PROVIDER'; provider: ProviderConfig; permissionGranted: boolean }
@@ -28,11 +28,16 @@ export type RuntimeMessage =
       unit: import('./schema').MetricUnit;
       evidence: string;
       semanticSignals: string[];
+      /** Teach-time nearby reset (Grok「2026年7月24日…にリセット」) so Done keeps it without re-capture. */
+      resetLabel?: string | null;
+      resetAt?: string | null;
     };
   }
   | { type: 'SAVE_RESET_ANCHOR'; providerId: string; metricId: string; resetAnchor: AnchorFingerprint }
   | { type: 'RENAME_METRIC'; providerId: string; metricId: string; label: string }
   | { type: 'REMOVE_METRIC'; providerId: string; metricId: string }
+  /** Clear all taught metrics and failure counters so the user can start teach from a clean slate. */
+  | { type: 'RESET_TEACH'; providerId: string }
   | { type: 'DONE_TEACH'; providerId: string }
   | { type: 'CANCEL_TEACH'; providerId: string };
 

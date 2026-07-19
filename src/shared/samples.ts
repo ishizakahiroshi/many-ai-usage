@@ -1,7 +1,9 @@
 import { parseProvidersRegistryResponse, type ProviderConfig } from './schema';
 
 export const PROVIDERS_REGISTRY_URL = 'https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json';
-export const USAGE_GUIDE_URL = 'https://ishizakahiroshi.github.io/articles/many-ai-usage/usage.html';
+export const USAGE_GUIDE_URL = 'https://ishizakahiroshi.com/articles/many-ai-usage/usage.html';
+/** Store Support URL / contact landing (thin page; no ticket backend). */
+export const SUPPORT_URL = 'https://ishizakahiroshi.com/articles/many-ai-usage/support.html';
 export const SAMPLE_PROVIDER_IDS = [
   'sample:claude',
   'sample:codex',

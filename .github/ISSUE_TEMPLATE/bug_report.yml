@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a problem with many-ai-usage (no secrets)
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Do not paste cookies, tokens, Authorization headers, account emails, raw HTML, or real usage numbers.**
+
+        Prefer generating a report from the extension: **Settings → 不具合を報告 / Report**, then paste it below.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Short description of the problem
+      placeholder: Re-teach opens but Done does not save
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Expected behavior vs actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Optional but very helpful
+      placeholder: |
+        1. Open Settings
+        2. Click Fix tracking
+        3. …
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (non-secret)
+      description: Extension version, browser (Chrome/Firefox), provider display names and status only. Do not include URLs with query tokens or usage values.
+      placeholder: |
+        - Extension: many-ai-usage v0.1.0
+        - Browser: Chrome
+        - Providers: 2
+        - Status summary:
+          - Example AI: needs_teaching
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed cookies, tokens, account emails, raw HTML, and real usage numbers from this report and any screenshots.
+          required: true

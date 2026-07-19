@@ -22,7 +22,7 @@ The sample registry is data, not executable code:
 
 `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json`
 
-See the [Japanese usage guide](https://ishizakahiroshi.github.io/articles/many-ai-usage/usage.html) for the practice page and service-by-service navigation recipes.
+See the [Japanese usage guide](https://ishizakahiroshi.com/articles/many-ai-usage/usage.html) for the practice page and service-by-service navigation recipes.
 
 ## Development
 

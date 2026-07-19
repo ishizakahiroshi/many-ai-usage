@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Usage guide (Japanese)
+    url: https://ishizakahiroshi.com/articles/many-ai-usage/usage.html
+    about: Practice page, recipes, and FAQ before filing an issue
+  - name: Support overview
+    url: https://ishizakahiroshi.com/articles/many-ai-usage/support.html
+    about: Where to report problems and what not to include

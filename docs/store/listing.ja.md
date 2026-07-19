@@ -44,4 +44,14 @@ many-ai-usage は、登録した利用状況ページからユーザーが選ん
 
 画像は `docs/local/design_teach-mode-store-screens_2026-07-14.html` から生成した合成データのスクリーンショットです。実サービスの画面、ロゴ、アカウント情報は含みません。
 
-Privacy policy: `docs/privacy-policy.html`
+## ストア掲載 URL（デベロッパーコンソールに記入）
+
+- Homepage: `https://github.com/ishizakahiroshi/many-ai-usage`（または `https://ishizakahiroshi.com/work.html?id=many-ai-usage`）
+- Support: `https://ishizakahiroshi.com/articles/many-ai-usage/support.html`
+- Privacy policy: `docs/privacy-policy.html` を公開した URL（submission notes 参照）
+- Usage guide: `https://ishizakahiroshi.com/articles/many-ai-usage/usage.html`
+
+## サポート運用（短く）
+
+- Chrome ウェブストアのレビュー欄は公開評価であり、バグトラッカーではない。短く返信し、Support URL / 拡張の「不具合を報告」/ GitHub Issues へ誘導する
+- Cookie・トークン・アカウントメール・ページ HTML・実利用量の貼付をユーザーに求めない

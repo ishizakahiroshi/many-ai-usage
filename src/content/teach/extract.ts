@@ -81,9 +81,17 @@ export function extractValue(element: Element): ExtractedValue {
 
   const ariaValue = numberValue(element.getAttribute('aria-valuenow'));
   if (ariaValue != null) {
-    const max = numberValue(element.getAttribute('aria-valuemax'));
-    const value = max != null && max > 0 && unit !== 'percent' ? ariaValue : ariaValue;
-    return { value, used: semanticSignals.includes('used') ? value : null, remaining: semanticSignals.includes('remaining') || unit === 'percent' ? value : null, total: max, unit: max != null && unit === 'custom' ? 'percent' : unit, evidence, semanticSignals: [...semanticSignals, 'aria-valuenow'] };
+    // Chart shells often expose aria-valuenow="0" while the visible label says "62% 使用済".
+    // Prefer the explicit percent text in that case; keep real aria values (e.g. 37) otherwise.
+    const textHasBetterPercent = ariaValue === 0
+      && preferred.value != null
+      && preferred.value > 0
+      && preferred.unit === 'percent';
+    if (!textHasBetterPercent) {
+      const max = numberValue(element.getAttribute('aria-valuemax'));
+      const value = max != null && max > 0 && unit !== 'percent' ? ariaValue : ariaValue;
+      return { value, used: semanticSignals.includes('used') ? value : null, remaining: semanticSignals.includes('remaining') || unit === 'percent' ? value : null, total: max, unit: max != null && unit === 'custom' ? 'percent' : unit, evidence, semanticSignals: [...semanticSignals, 'aria-valuenow'] };
+    }
   }
 
   if (element instanceof HTMLElement && element.tagName.toLowerCase() === 'progress') {

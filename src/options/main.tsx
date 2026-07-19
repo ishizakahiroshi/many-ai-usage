@@ -4,8 +4,10 @@ import type { DashboardResponse } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, statusLabel } from '../shared/format';
 import { fileToIconDataUrl } from '../shared/icon';
 import type { ProviderConfig, ProviderMode } from '../shared/schema';
+import { buildGitHubIssueUrl, buildReportBody, detectBrowser, githubOpenUserMessage } from '../shared/report';
 import { fetchProvidersRegistry, isSampleProviderId, PROVIDERS_REGISTRY_URL, USAGE_GUIDE_URL } from '../shared/samples';
 import { applyRegistryProviders } from '../shared/storage';
+import { obsLog, perfLog, perfNow } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
 import { originChanged, originPattern, urlWithoutHash } from '../shared/url';
 import './styles.css';
@@ -35,7 +37,13 @@ async function requestPermission(url: string): Promise<boolean> {
   try { return await chrome.permissions.request({ origins: [originPattern(url)] }); } catch { return false; }
 }
 
+function requestedProviderId(): string | null {
+  return new URLSearchParams(window.location.search).get('provider');
+}
+
 function OptionsApp() {
+  // Capture deep-link before strip effect / async reload can clear the query.
+  const [bootProviderId] = useState<string | null>(() => requestedProviderId());
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<ProviderDraft>(blankDraft());
@@ -45,28 +53,78 @@ function OptionsApp() {
   const [samplesDialogOpen, setSamplesDialogOpen] = useState(() => new URLSearchParams(window.location.search).get('trySamples') === '1');
   const [samplesLoading, setSamplesLoading] = useState(false);
   const [samplesError, setSamplesError] = useState('');
+  const [reportOpen, setReportOpen] = useState(() => new URLSearchParams(window.location.search).get('report') === '1');
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportSteps, setReportSteps] = useState('');
+  const [reportMessage, setReportMessage] = useState('');
+  const [reportPreviewOpen, setReportPreviewOpen] = useState(false);
 
-  const reload = () => void sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' }).then((next) => {
-    setDashboard(next);
-    if (selectedId == null && next.providers[0]) {
-      setSelectedId(next.providers[0].id);
-      setDraft(draftFrom(next.providers[0]));
-    }
-    if (selectedId && selectedId !== 'new' && !dirty) {
-      const selected = next.providers.find((provider) => provider.id === selectedId);
-      if (selected) setDraft(draftFrom(selected));
-    }
-  });
-  useEffect(reload, []);
+  const reload = () => {
+    const startedAt = perfNow();
+    obsLog('options.reload.start');
+    void sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' })
+      .then((next) => {
+        setDashboard(next);
+        if (selectedId == null) {
+          // Prefer the provider deep-linked from popup Settings; fall back to first in list.
+          const preferred = (bootProviderId && next.providers.find((provider) => provider.id === bootProviderId))
+            || next.providers[0]
+            || null;
+          if (preferred) {
+            setSelectedId(preferred.id);
+            setDraft(draftFrom(preferred));
+          }
+        }
+        if (selectedId && selectedId !== 'new' && !dirty) {
+          const selected = next.providers.find((provider) => provider.id === selectedId);
+          if (selected) setDraft(draftFrom(selected));
+        }
+        obsLog('options.reload.done', {
+          providers: next.providers.length,
+          ms: Math.round(perfNow() - startedAt),
+        });
+        perfLog('options.reload', startedAt, { providers: next.providers.length }, 30);
+      })
+      .catch((error: unknown) => {
+        obsLog('options.reload.fail', {
+          ms: Math.round(perfNow() - startedAt),
+          error: error instanceof Error ? error.name : 'unknown',
+        });
+      });
+  };
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has('trySamples')) {
+    obsLog('options.boot', {
+      hrefPath: window.location.pathname,
+      trySamples: new URLSearchParams(window.location.search).get('trySamples') === '1',
+      hasProvider: Boolean(bootProviderId),
+    });
+    reload();
+  }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // Strip one-shot launch params so reload/bookmark does not keep forcing selection/dialog.
+    if (params.has('trySamples') || params.has('provider') || params.has('report')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
   useEffect(() => {
-    const onStorageChanged = () => reload();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const onStorageChanged = (_changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== 'local') return;
+      obsLog('options.storage.onChanged', { keys: Object.keys(_changes) });
+      // Debounce: rapid multi-key writes (or any residual write storms) must not stack reloads.
+      if (debounceTimer != null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        reload();
+      }, 120);
+    };
     chrome.storage.onChanged.addListener(onStorageChanged);
-    return () => chrome.storage.onChanged.removeListener(onStorageChanged);
+    return () => {
+      if (debounceTimer != null) clearTimeout(debounceTimer);
+      chrome.storage.onChanged.removeListener(onStorageChanged);
+    };
   }, [selectedId, dirty]);
 
   const selectedProvider = useMemo(() => dashboard?.providers.find((provider) => provider.id === selectedId) ?? null, [dashboard, selectedId]);
@@ -141,7 +199,7 @@ function OptionsApp() {
     reload();
   };
 
-  const trackSelected = async (metricId?: string, pickerMode: 'metrics' | 'reset' = 'metrics') => {
+  const trackSelected = async (metricId?: string, pickerMode: 'metrics' | 'reset' = 'metrics', resetFirst = false) => {
     if (!selectedProvider) return;
     let granted = await permissionFor(selectedProvider.url);
     if (!granted) {
@@ -160,12 +218,30 @@ function OptionsApp() {
     } catch {
       /* options may not expose getCurrent in all hosts */
     }
-    const result = await sendMessage<{ started?: boolean }>({ type: 'START_PICKER', providerId: selectedProvider.id, metricId, pickerMode });
-    setMessage(result?.started === false
-      ? 'Unable to open the registered page. Check host access and try again.'
-      : pickerMode === 'reset'
-        ? 'A new teaching tab opened. Choose the reset date or countdown, then select Done and return.'
-        : 'A new teaching tab opened. Choose one or more usage values, then select Done and return.');
+    if (resetFirst) {
+      setMessage('Clearing broken tracks…');
+      await sendMessage({ type: 'RESET_TEACH', providerId: selectedProvider.id });
+      reload();
+    }
+    setMessage(pickerMode === 'reset' ? 'Starting teach mode (reset)…' : 'Starting teach mode…');
+    const result = await sendMessage<{ started?: boolean; reason?: string }>({
+      type: 'START_PICKER',
+      providerId: selectedProvider.id,
+      metricId: resetFirst ? undefined : metricId,
+      pickerMode,
+    });
+    if (result?.started === false) {
+      const detail = result.reason === 'permission_denied'
+        ? 'Host access is required. Grant permission and try again.'
+        : result.reason === 'content_script_unreachable'
+          ? 'Could not attach teach mode. Open the usage page (e.g. grok.com/?_s=usage), wait for it to load, then try again.'
+          : 'Unable to open teach mode. Check host access and that the usage page URL is correct.';
+      setMessage(detail);
+      return;
+    }
+    setMessage(pickerMode === 'reset'
+      ? 'Teaching tab is ready. Choose the reset date or countdown, then select Done and return.'
+      : 'Teaching tab is ready. Click the big total (e.g.「使用済」), not a small legend chip. Then Done and return.');
   };
 
   const onIconFile = async (file: File | null) => {
@@ -236,10 +312,79 @@ function OptionsApp() {
     }
   };
 
+  const openReport = () => {
+    setReportMessage('');
+    setReportPreviewOpen(false);
+    setReportOpen(true);
+  };
+
+  const extensionVersion = useMemo(() => {
+    try {
+      return chrome.runtime.getManifest().version;
+    } catch {
+      return '0.1.0';
+    }
+  }, []);
+
+  const reportBody = useMemo(() => {
+    if (!dashboard) return '';
+    return buildReportBody({
+      title: reportTitle,
+      description: reportDescription,
+      steps: reportSteps,
+      extensionVersion,
+      browser: detectBrowser(typeof navigator !== 'undefined' ? navigator.userAgent : ''),
+      providers: dashboard.providers.map((provider) => ({
+        displayName: provider.displayName,
+        status: dashboard.runtimeStates[provider.id]?.status ?? 'never_seen',
+      })),
+    });
+  }, [dashboard, reportTitle, reportDescription, reportSteps, extensionVersion]);
+
+  const copyReport = async () => {
+    if (!reportTitle.trim() || !reportDescription.trim()) {
+      setReportMessage('タイトルと「何が起きたか」を入力してください。');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(reportBody);
+      setReportMessage('クリップボードにコピーしました。Issue に貼り付けてください。');
+    } catch {
+      setReportPreviewOpen(true);
+      setReportMessage('コピーに失敗しました。下の文面を手動で選択してコピーしてください。');
+    }
+  };
+
+  /** Always copy first — Issue Forms often drop ?body= prefill. */
+  const openGitHubIssue = async () => {
+    if (!reportTitle.trim() || !reportDescription.trim()) {
+      setReportMessage('タイトルと「何が起きたか」を入力してください。');
+      return;
+    }
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(reportBody);
+      copied = true;
+    } catch {
+      copied = false;
+      setReportPreviewOpen(true);
+    }
+    const { url, bodyIncluded } = buildGitHubIssueUrl(reportTitle, reportBody);
+    setReportMessage(githubOpenUserMessage(copied, bodyIncluded));
+    void chrome.tabs.create({ url, active: true });
+  };
+
   if (!dashboard) return <div class="options-loading">Loading settings…</div>;
   return (
     <div class="options-shell">
-      <header class="options-header"><div><strong>many-ai-usage</strong><span>Settings · v0.1.0</span></div><span class="privacy-note">Local-only · read-only page capture</span></header>
+      <header class="options-header">
+        <div class="brand">
+          <img class="app-icon" src={chrome.runtime.getURL('assets/icons/icon-192.png')} width={28} height={28} alt="" />
+          <strong>many-ai-usage</strong>
+          <span>Settings · v{extensionVersion}</span>
+        </div>
+        <span class="privacy-note">Local-only · read-only page capture</span>
+      </header>
       <div class="options-layout">
         <aside class="sidebar">
           <button class="add-button" onClick={() => select('new')}>＋ New provider</button>
@@ -263,6 +408,9 @@ function OptionsApp() {
                 <span class="sidebar-provider-main"><strong>{provider.displayName}</strong><small>{lowest != null ? `${Math.round(lowest)}% remaining` : state.status === 'needs_permission' ? 'Needs access' : snapshot?.source === 'page_only' ? 'tile' : 'Not captured'}</small></span><span class={`sidebar-state ${state.status}`}>{state.status === 'needs_permission' ? '要許可' : snapshot?.source === 'page_only' ? 'tile' : ''}</span>
               </button>;
             })}
+          </div>
+          <div class="sidebar-footer">
+            <button type="button" class="report-link-button" onClick={openReport}>不具合を報告 / Report</button>
           </div>
         </aside>
         <main class="main-panel">
@@ -303,8 +451,8 @@ function OptionsApp() {
                 <label>Refresh interval (minutes)<input type="number" min="3" max="240" value={draft.refreshIntervalMinutes} onInput={(event) => updateDraft('refreshIntervalMinutes', Number(event.currentTarget.value))} /></label>
                 <label>Mode<select value={draft.mode} onChange={(event) => updateDraft('mode', event.currentTarget.value as ProviderMode)}><option value="auto">Auto detect (candidate preview)</option><option value="taught">User taught</option><option value="embed">Page tile</option></select></label>
               </div>
-              {selectedProvider && <div class="teach-panel"><div><strong>Teach this page</strong><p class="help-text">A new tab opens with a continuous picker. Click every usage value you want to track, then select Done and return.</p></div><button class="primary-button" onClick={() => void trackSelected()}>＋ Track this element</button></div>}
-              {selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics"><strong>Tracked elements</strong>{selectedProvider.metrics.map((metric) => { const lastValue = selectedSnapshot?.metrics.find((item) => item.id === metric.metricId); return <div class="taught-metric" key={metric.metricId}><span><b>{metric.label}</b><small>{metric.windowLabel ?? '—'} · {metric.valueAnchor?.selectors[0] ?? 'no selector'} · last: {lastValue ? formatMetric(lastValue) : 'not read'}</small></span><span class="metric-actions"><button onClick={() => void renameMetric(metric.metricId, metric.label)}>Rename</button><button onClick={() => void trackSelected(metric.metricId)}>Re-teach value</button><button onClick={() => void trackSelected(metric.metricId, 'reset')}>Re-teach reset</button><button onClick={() => void removeMetric(metric.metricId)}>Delete</button></span></div>; })}</div>}
+              {selectedProvider && <div class="teach-panel"><div><strong>Teach this page</strong><p class="help-text">Opens teach mode on the usage page. Click the big total (e.g.「使用済」), not a small legend chip, then Done and return.</p></div><div class="teach-panel-actions"><button class="primary-button" onClick={() => void trackSelected()}>＋ Track this element</button>{selectedProvider.metrics.length > 0 && <button class="primary-button" onClick={() => void trackSelected(undefined, 'metrics', true)}>Fix tracking (clear &amp; re-teach)</button>}</div></div>}
+              {selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics"><strong>Tracked elements</strong>{selectedProvider.metrics.map((metric) => { const lastValue = selectedSnapshot?.metrics.find((item) => item.id === metric.metricId); const unread = !lastValue; return <div class="taught-metric" key={metric.metricId}><span><b>{metric.label}</b><small>{metric.windowLabel ?? '—'} · {metric.valueAnchor?.selectors[0] ?? 'no selector'} · last: {lastValue ? formatMetric(lastValue) : 'not read'}</small>{unread ? <small class="teach-unread-hint">Broken track. Click「Fix tracking」above, open usage sheet, teach the big「使用済」total.</small> : null}</span><span class="metric-actions"><button onClick={() => void renameMetric(metric.metricId, metric.label)}>Rename</button><button onClick={() => void trackSelected(metric.metricId)}>Re-teach value</button><button onClick={() => void trackSelected(metric.metricId, 'reset')}>Re-teach reset</button><button onClick={() => void removeMetric(metric.metricId)}>Delete</button></span></div>; })}</div>}
             </section>
             {selectedProvider && <section class="diagnostic-section"><div class="section-heading"><h2>Diagnostics</h2><span>{selectedState?.errorLabel ?? 'Evidence summary'}</span></div><dl class="diagnostic-grid"><dt>Status</dt><dd>{selectedState?.status ?? 'never_seen'}</dd><dt>Source</dt><dd>{selectedSnapshot?.source ?? '—'}</dd><dt>Confidence</dt><dd>{selectedState?.confidence ?? 'none'}</dd><dt>Last captured</dt><dd>{ageLabel(selectedSnapshot?.capturedAt ?? null)}</dd><dt>Stale threshold</dt><dd>{draft.refreshIntervalMinutes * 2} minutes</dd><dt>Evidence</dt><dd>{selectedState?.evidenceSummary.join(' · ') || '—'}</dd></dl></section>}
             <div class="form-footer"><button class="danger-button" disabled={!selectedProvider} onClick={() => void remove()}>Delete</button><div><button disabled={!dirty} onClick={() => { if (selectedProvider) setDraft(draftFrom(selectedProvider)); else setDraft(blankDraft(dashboard.providers.length)); setDirty(false); setMessage(''); }}>Discard changes</button><button class="primary-button" disabled={!dirty} onClick={() => void save()}>Save</button></div></div>
@@ -322,6 +470,32 @@ function OptionsApp() {
           <div class="samples-dialog-actions">
             <button disabled={samplesLoading} onClick={() => setSamplesDialogOpen(false)}>キャンセル</button>
             <button class="primary-button" disabled={samplesLoading} onClick={() => void importSamples()}>{samplesLoading ? '取得中…' : samplesError ? '再試行' : '取得する'}</button>
+          </div>
+        </section>
+      </div>}
+      {reportOpen && <div class="samples-dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setReportOpen(false); }}>
+        <section class="samples-dialog report-dialog" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title">
+          <h2 id="report-dialog-title">不具合を報告 / Report a problem</h2>
+          <p class="report-privacy-note">Cookie・トークン・実利用量・ページ本文・アカウント情報は書かないでください。自動埋め込みは拡張バージョン・ブラウザ種別・provider の表示名と状態のみです。「GitHub で開く」は先にクリップボードへコピーします（Issue フォームでは本文の自動入力が効かないことがあります）。</p>
+          <label class="report-field">タイトル（必須）
+            <input value={reportTitle} onInput={(event) => { setReportTitle(event.currentTarget.value); setReportMessage(''); }} placeholder="例: Re-teach 後に値が保存されない" maxLength={120} />
+          </label>
+          <label class="report-field">何が起きたか（必須）
+            <textarea value={reportDescription} onInput={(event) => { setReportDescription(event.currentTarget.value); setReportMessage(''); }} rows={4} placeholder="期待した動きと実際の動き" maxLength={2000} />
+          </label>
+          <label class="report-field">再現手順（任意）
+            <textarea value={reportSteps} onInput={(event) => { setReportSteps(event.currentTarget.value); setReportMessage(''); }} rows={3} placeholder="1. …&#10;2. …" maxLength={2000} />
+          </label>
+          <p class="help-text">スクショを付ける場合は、個人情報が写らないように隠してから添付してください。</p>
+          <details class="report-preview" open={reportPreviewOpen || undefined} onToggle={(event) => setReportPreviewOpen((event.currentTarget as HTMLDetailsElement).open)}>
+            <summary>生成されるレポート文面</summary>
+            <pre>{reportBody}</pre>
+          </details>
+          {reportMessage && <p class={`report-status ${reportMessage.includes('失敗') || reportMessage.includes('入力') ? 'is-error' : ''}`} role="status">{reportMessage}</p>}
+          <div class="samples-dialog-actions report-actions">
+            <button type="button" onClick={() => setReportOpen(false)}>閉じる</button>
+            <button type="button" onClick={() => void copyReport()}>レポートをコピー</button>
+            <button type="button" class="primary-button" onClick={() => void openGitHubIssue()}>GitHub で開く</button>
           </div>
         </section>
       </div>}

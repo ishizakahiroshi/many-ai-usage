@@ -1,5 +1,6 @@
 import type { ProviderContext } from '../shared/messages';
 import type { NormalizedSnapshot } from '../shared/schema';
+import { diagLog, perfLog, perfNow } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
 import { readTaught } from './teach/read';
 import { isPickerActive, startPicker } from './teach/picker';
@@ -28,6 +29,7 @@ function pageOnlySnapshot(context: ProviderContext): NormalizedSnapshot {
 }
 
 async function waitForHydration(): Promise<void> {
+  const startedAt = perfNow();
   if (document.readyState === 'loading') {
     await new Promise<void>((resolve) => document.addEventListener('DOMContentLoaded', () => resolve(), { once: true }));
   }
@@ -46,6 +48,7 @@ async function waitForHydration(): Promise<void> {
       resolve();
     }
   });
+  perfLog('content.waitForHydration', startedAt, { href: location.href }, 100);
 }
 
 async function capture(force = false): Promise<void> {
@@ -56,11 +59,23 @@ async function capture(force = false): Promise<void> {
   const key = urlKey();
   if (!force && lastCapturedUrl === key) return;
   captureInFlight = true;
+  const startedAt = perfNow();
   try {
     const context = await sendMessage<ProviderContext | null>({ type: 'GET_PROVIDER_CONTEXT', url: location.href });
-    if (!context?.permissionGranted) return;
+    if (!context?.permissionGranted) {
+      diagLog('content.capture.skip', { reason: 'no-context-or-permission', href: location.href });
+      return;
+    }
+    diagLog('content.capture.start', {
+      force,
+      mode: context.provider.mode,
+      providerId: context.provider.id,
+      taughtCount: context.provider.metrics.filter((m) => m.enabled && m.valueAnchor).length,
+      href: `${location.pathname}${location.search}`,
+    });
     await waitForHydration();
-    const snapshot = context.provider.mode === 'embed'
+    const readStartedAt = perfNow();
+    let snapshot = context.provider.mode === 'embed'
       ? pageOnlySnapshot(context)
       : context.provider.mode === 'taught'
         ? readTaught(document, context.provider)
@@ -68,14 +83,40 @@ async function capture(force = false): Promise<void> {
           ...pageOnlySnapshot(context),
           warningReason: 'Auto detection is preview-only. Track the exact usage element to show a metric.',
         };
+    // Grok-style usage sheets mount after first paint — retry while taught metrics stay empty.
+    if (
+      context.provider.mode === 'taught'
+      && snapshot.metrics.length === 0
+      && context.provider.metrics.some((metric) => metric.enabled && metric.valueAnchor)
+    ) {
+      for (const waitMs of [800, 1_500, 2_500]) {
+        diagLog('content.capture.retry', {
+          providerId: context.provider.id,
+          waitMs,
+          previousStatus: snapshot.status,
+        });
+        await new Promise<void>((resolve) => window.setTimeout(resolve, waitMs));
+        snapshot = readTaught(document, context.provider);
+        if (snapshot.metrics.length > 0) break;
+      }
+    }
+    perfLog('content.readSnapshot', readStartedAt, { mode: context.provider.mode, providerId: context.provider.id, metrics: snapshot.metrics.length }, 20);
+    diagLog('content.capture.result', {
+      providerId: context.provider.id,
+      status: snapshot.status,
+      metrics: snapshot.metrics.length,
+      warning: Boolean(snapshot.warningReason),
+    });
     await sendMessage({ type: 'CAPTURE_RESULT', providerId: context.provider.id, snapshot });
     lastCapturedUrl = key;
   } catch (error) {
+    diagLog('content.capture.error', { name: error instanceof Error ? error.name : 'unknown' });
     const provider = await sendMessage<ProviderContext | null>({ type: 'GET_PROVIDER_CONTEXT', url: location.href }).catch(() => null);
     if (provider) {
       await sendMessage({ type: 'CAPTURE_FAILURE', providerId: provider.provider.id, reason: error instanceof Error ? error.message : 'capture failed' });
     }
   } finally {
+    perfLog('content.capture', startedAt, { force, href: location.href }, 50);
     captureInFlight = false;
     if (captureQueued) {
       captureQueued = false;
@@ -100,8 +141,12 @@ chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendR
     const metricId = 'metricId' in message && typeof message.metricId === 'string' ? message.metricId : undefined;
     const pickerMode = 'pickerMode' in message && message.pickerMode === 'reset' ? 'reset' : 'metrics';
     // startPicker itself replaces any previous host; do not removeOrphan first (re-inject races).
-    startPicker(String(message.providerId), metricId, pickerMode);
-    sendResponse({ ok: true });
+    try {
+      startPicker(String(message.providerId), metricId, pickerMode);
+      sendResponse({ ok: true, pickerActive: isPickerActive() });
+    } catch (error) {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : 'startPicker failed' });
+    }
     return false;
   }
   if (message.type !== 'CAPTURE_NOW') return false;

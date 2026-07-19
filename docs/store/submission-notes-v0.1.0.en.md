@@ -26,6 +26,10 @@ The fixed GitHub raw permission is used only after the user confirms Try samples
 - Try samples sends a GET request with no credentials or user data to the documented public GitHub raw registry
 - Settings and captured values stay in browser extension storage
 
+## Support URL intent
+
+Support points to `https://ishizakahiroshi.com/articles/many-ai-usage/support.html`. That page explains browser-local reporting (Settings → Report) and GitHub Issues. It is not a cloud ticket system and does not collect usage data. Store reviews remain public ratings only; structured bugs go to Issues.
+
 ## Test focus
 
 - Load the extension and verify Track this element opens the provider page in a new tab
@@ -33,3 +37,4 @@ The fixed GitHub raw permission is used only after the user confirms Try samples
 - Change the page structure and verify fingerprint fallback and Re-teach
 - Deny host access and verify the needs_permission card
 - On an empty installation, open Try samples, cancel once, then confirm and verify six untaught provider tiles are added without duplicates
+- Open Settings → Report a problem, copy a synthetic report, and confirm no cookies/usage numbers/URLs are auto-filled
