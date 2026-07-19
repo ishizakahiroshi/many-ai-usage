@@ -102,22 +102,93 @@
       "displayName": "Cursor",
       "url": "https://cursor.com/dashboard",
       "urlMatch": ["https://cursor.com/*"],
-      "mode": "auto",
+      "mode": "taught",
       "refreshIntervalMinutes": 15,
+      "verifiedAt": "2026-07-19",
       "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/cursor.svg",
-      "note": "URL tile only until verified teach results are published.",
-      "metrics": []
+      "note": "Dogfood-shaped template (Chrome 2026-07-19): included usage %. SPA layout may shift — Re-teach if reads fail.",
+      "metrics": [
+        {
+          "metricId": "cursor-included",
+          "label": "Included usage",
+          "kind": "percent",
+          "unit": "percent",
+          "windowLabel": "included",
+          "valueAnchor": {
+            "selectors": [
+              "div.container > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)"
+            ],
+            "tagName": "div",
+            "textFingerprint": "6a4da7b9",
+            "nearbyLabel": "Your included usage0% usedResets 2026年7月"
+          },
+          "interpretation": "used_percent",
+          "enabled": true
+        }
+      ]
     },
     {
       "id": "sample:ollama",
       "displayName": "Ollama",
       "url": "https://ollama.com/settings",
       "urlMatch": ["https://ollama.com/*"],
-      "mode": "auto",
+      "mode": "taught",
       "refreshIntervalMinutes": 15,
+      "verifiedAt": "2026-07-19",
       "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/ollama.svg",
-      "note": "URL tile only until verified teach results are published.",
-      "metrics": []
+      "note": "Dogfood-shaped template (Chrome 2026-07-19): session + weekly %. Re-teach if SPA changes.",
+      "metrics": [
+        {
+          "metricId": "ollama-session",
+          "label": "Session usage",
+          "kind": "percent",
+          "unit": "percent",
+          "windowLabel": "Session usage",
+          "valueAnchor": {
+            "selectors": [
+              "div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(2)"
+            ],
+            "tagName": "span",
+            "textFingerprint": "d9f49f3f",
+            "nearbyLabel": "Session usage 0% used"
+          },
+          "resetAnchor": {
+            "selectors": [
+              "div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3)"
+            ],
+            "tagName": "div",
+            "textFingerprint": "6982c0ef",
+            "nearbyLabel": "Session usage 0% used Resets in 1 hour."
+          },
+          "interpretation": "used_percent",
+          "enabled": true
+        },
+        {
+          "metricId": "ollama-weekly",
+          "label": "Weekly usage",
+          "kind": "percent",
+          "unit": "percent",
+          "windowLabel": "Weekly usage",
+          "valueAnchor": {
+            "selectors": [
+              "section:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2)"
+            ],
+            "tagName": "span",
+            "textFingerprint": "d9f49f3f",
+            "nearbyLabel": "Weekly usage 0% used"
+          },
+          "resetAnchor": {
+            "selectors": [
+              "div:nth-of-type(2) > div:nth-of-type(3)"
+            ],
+            "tagName": "div",
+            "textFingerprint": "7853e5a2",
+            "nearbyLabel": "Weekly usage 0% used Resets in 12 hours."
+          },
+          "interpretation": "used_percent",
+          "enabled": true
+        }
+      ]
     }
   ]
 }
