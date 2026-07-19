@@ -541,6 +541,7 @@ function OptionsApp() {
             })}
           </div>
           <div class="sidebar-footer">
+            <button type="button" class="sidebar-starter-button" onClick={openSamplesDialog}>{t('samples.trySamples')}</button>
             <button type="button" class="report-link-button" onClick={openReport}>{t('report.link')}</button>
           </div>
         </aside>
