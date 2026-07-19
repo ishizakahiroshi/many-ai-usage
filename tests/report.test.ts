@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import en from '../src/locales/en.json';
+import ja from '../src/locales/ja.json';
+import { createTranslator, type MessageTable } from '../src/shared/i18n';
 import {
   buildGitHubIssueUrl,
   buildReportBody,
@@ -7,6 +10,9 @@ import {
   GITHUB_NEW_ISSUE_BASE,
   MAX_GITHUB_ISSUE_URL_LENGTH,
 } from '../src/shared/report';
+
+const tEn = createTranslator(en as MessageTable);
+const tJa = createTranslator(ja as MessageTable, en as MessageTable);
 
 describe('detectBrowser', () => {
   it('detects Firefox, Chrome, and Other', () => {
@@ -30,8 +36,8 @@ describe('buildReportBody', () => {
     ],
   };
 
-  it('includes user text and non-secret environment fields', () => {
-    const body = buildReportBody(base);
+  it('includes user text and non-secret environment fields (en pack)', () => {
+    const body = buildReportBody(base, tEn);
     expect(body).toContain('## Summary');
     expect(body).toContain('Picker fails after page change');
     expect(body).toContain('## What happened');
@@ -44,23 +50,21 @@ describe('buildReportBody', () => {
     expect(body).toContain('- Synthetic AI: needs_teaching');
     expect(body).toContain('- Example Bot: ok');
     expect(body).toContain('Do not paste cookies');
+    expect(body).toContain('Screenshots: attach on the GitHub Issue yourself');
+    expect(body).toContain('The extension cannot upload images');
   });
 
   it('never embeds secret-like auto fields (only displayName + status + user text)', () => {
     const body = buildReportBody({
       ...base,
-      // Malicious-looking strings in user-controlled title must stay user text only;
-      // auto section must still list only displayName + status.
       title: 'UI freeze (not a token leak)',
       providers: [{ displayName: 'Synthetic AI', status: 'error' }],
-    });
-    // Contract: auto-filled section has no URL / usage numbers / auth material.
+    }, tEn);
     expect(body).toContain('Synthetic AI: error');
     expect(body).not.toMatch(/Authorization:/i);
     expect(body).not.toMatch(/Bearer /);
     expect(body).not.toMatch(/innerHTML|outerHTML/);
     expect(body).not.toMatch(/https?:\/\/[^\s]+/);
-    // Keys that must never appear as auto-filled lines
     expect(body).not.toMatch(/^- Cookie:/m);
     expect(body).not.toMatch(/^- URL:/m);
     expect(body).not.toMatch(/^- Usage value:/m);
@@ -77,8 +81,7 @@ describe('buildReportBody', () => {
           status: 'ok',
         },
       ],
-    });
-    // displayName is user-controlled and may echo secrets — still must not invent secret field labels.
+    }, tEn);
     const envSection = body.split('## Environment (auto-filled, non-secret)')[1]?.split('## Notes')[0] ?? '';
     expect(envSection).toMatch(/^- Extension: many-ai-usage v/m);
     expect(envSection).toMatch(/^- Browser: /m);
@@ -88,7 +91,6 @@ describe('buildReportBody', () => {
     expect(envSection).not.toMatch(/^- URL:/m);
     expect(envSection).not.toMatch(/^- Usage value:/m);
     expect(envSection).not.toMatch(/Authorization:/i);
-    // Snapshot of auto field keys only (values may contain user rename noise).
     const autoKeys = [...envSection.matchAll(/^- ([^:\n]+):/gm)].map((match) => match[1]);
     expect(autoKeys).toEqual(['Extension', 'Browser', 'Providers', 'Status summary']);
   });
@@ -100,7 +102,7 @@ describe('buildReportBody', () => {
       extensionVersion: '0.1.0',
       browser: 'Firefox',
       providers: [],
-    });
+    }, tEn);
     expect(body).toContain('(no title)');
     expect(body).toContain('(not provided)');
     expect(body).toContain('Providers: 0');
@@ -116,8 +118,8 @@ describe('buildGitHubIssueUrl', () => {
       extensionVersion: '0.1.0',
       browser: 'Chrome',
       providers: [{ displayName: 'A', status: 'ok' }],
-    });
-    const result = buildGitHubIssueUrl('Short', body);
+    }, tEn);
+    const result = buildGitHubIssueUrl('Short', body, tEn);
     expect(result.bodyIncluded).toBe(true);
     expect(result.url.startsWith(GITHUB_NEW_ISSUE_BASE)).toBe(true);
     expect(result.url).toContain('title=');
@@ -137,8 +139,8 @@ describe('buildGitHubIssueUrl', () => {
         displayName: `Provider ${i}`,
         status: 'needs_permission',
       })),
-    });
-    const result = buildGitHubIssueUrl('Long report', body);
+    }, tEn);
+    const result = buildGitHubIssueUrl('Long report', body, tEn);
     expect(result.bodyIncluded).toBe(false);
     expect(result.url).toContain('title=');
     expect(result.url).not.toContain('body=');
@@ -147,14 +149,16 @@ describe('buildGitHubIssueUrl', () => {
 });
 
 describe('githubOpenUserMessage', () => {
-  it('always steers users to paste when copy succeeded (Issue Form safe)', () => {
-    expect(githubOpenUserMessage(true, true)).toMatch(/コピー/);
-    expect(githubOpenUserMessage(true, true)).toMatch(/貼/);
-    expect(githubOpenUserMessage(true, false)).toMatch(/コピー済み/);
+  it('uses Japanese pack strings when t is ja', () => {
+    expect(githubOpenUserMessage(true, true, tJa)).toMatch(/コピー/);
+    expect(githubOpenUserMessage(true, true, tJa)).toMatch(/貼/);
+    expect(githubOpenUserMessage(true, false, tJa)).toMatch(/コピー済み/);
+    expect(githubOpenUserMessage(true, true, tJa)).toMatch(/スクショは Issue 画面で自分で貼り付け/);
   });
 
-  it('asks for manual copy when clipboard failed', () => {
-    expect(githubOpenUserMessage(false, true)).toMatch(/コピーに失敗/);
-    expect(githubOpenUserMessage(false, false)).toMatch(/手動でコピー/);
+  it('uses English pack strings when t is en', () => {
+    expect(githubOpenUserMessage(true, true, tEn)).toMatch(/Copied the report/);
+    expect(githubOpenUserMessage(false, true, tEn)).toMatch(/Copy failed/);
+    expect(githubOpenUserMessage(true, true, tEn)).toMatch(/Attach screenshots yourself/);
   });
 });

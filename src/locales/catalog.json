@@ -1,0 +1,13 @@
+{
+  "defaultLocale": "en",
+  "locales": {
+    "en": {
+      "label": "English",
+      "file": "en.json"
+    },
+    "ja": {
+      "label": "日本語",
+      "file": "ja.json"
+    }
+  }
+}

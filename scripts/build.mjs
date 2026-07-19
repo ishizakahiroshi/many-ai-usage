@@ -28,6 +28,8 @@ async function prepareTarget(target) {
   await cp(join(root, 'src/extension/popup.html'), join(outdir, 'popup.html'));
   await cp(join(root, 'src/extension/options.html'), join(outdir, 'options.html'));
   await cp(join(root, 'src/extension/assets'), join(outdir, 'assets'), { recursive: true });
+  // Language packs: add locales/<code>.json + catalog.json entry; no bundle change required.
+  await cp(join(root, 'src/locales'), join(outdir, 'locales'), { recursive: true });
   return outdir;
 }
 

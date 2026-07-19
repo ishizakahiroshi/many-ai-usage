@@ -2,6 +2,14 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DashboardResponse } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, resetLabel, statusLabel } from '../shared/format';
 import type { NormalizedMetric, ProviderConfig, ProviderRuntimeState } from '../shared/schema';
+import {
+  initI18n,
+  listLocales,
+  setStoredUiLocale,
+  UI_LOCALE_STORAGE_KEY,
+  type LocaleCatalog,
+  type TranslateFn,
+} from '../shared/i18n';
 import { USAGE_GUIDE_URL } from '../shared/samples';
 import { obsLog } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
@@ -260,11 +268,33 @@ function IssueCard({ provider, snapshot, state, reload }: { provider: ProviderCo
 function PopupApp() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [issuesOpen, setIssuesOpen] = useState(false);
+  const [t, setT] = useState<TranslateFn | null>(null);
+  const [locale, setLocale] = useState('en');
+  const [catalog, setCatalog] = useState<LocaleCatalog | null>(null);
   const reload = () => void sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' }).then(setDashboard);
+
+  const applyI18n = () => {
+    void initI18n()
+      .then((i18n) => {
+        setT(() => i18n.t);
+        setLocale(i18n.locale);
+        setCatalog(i18n.catalog);
+      })
+      .catch(() => setT(() => (key: string) => key));
+  };
+
   useEffect(reload, []);
   useEffect(() => {
+    applyI18n();
+  }, []);
+  useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const onStorageChanged = () => {
+    const onStorageChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== 'local') return;
+      if (changes[UI_LOCALE_STORAGE_KEY]) {
+        applyI18n();
+        return;
+      }
       if (debounceTimer != null) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
@@ -278,13 +308,18 @@ function PopupApp() {
     };
   }, []);
 
-  if (!dashboard) return <div class="popup-shell loading">Loading usage…</div>;
+  const changeLocale = (code: string) => {
+    void setStoredUiLocale(code).then(() => applyI18n());
+  };
+
+  if (!dashboard || !t) return <div class="popup-shell loading">{t?.('common.loading') ?? 'Loading…'}</div>;
   const normal = dashboard.providers.filter((provider) => {
     const state = dashboard.runtimeStates[provider.id];
     const snapshot = dashboard.snapshots[provider.id];
     return state?.status === 'ok' || state?.status === 'warning' || state?.status === 'stale' ? Boolean(snapshot?.metrics.length) : false;
   });
   const issues = dashboard.providers.filter((provider) => !normal.some((item) => item.id === provider.id));
+  const localeOptions = catalog ? listLocales(catalog) : [{ code: locale, label: locale }];
   return (
     <div class="popup-shell">
       <header class="popup-header">
@@ -293,10 +328,25 @@ function PopupApp() {
           <strong>many-ai-usage</strong>
           <span>v0.1.0</span>
         </div>
-        <button class="text-button" onClick={() => openOptions()}>⚙ options</button>
+        <div class="header-actions">
+          <label class="locale-select-wrap">
+            <span class="visually-hidden">{t('common.language')}</span>
+            <select
+              class="locale-select"
+              value={locale}
+              aria-label={t('common.language')}
+              onChange={(event) => changeLocale(event.currentTarget.value)}
+            >
+              {localeOptions.map((item) => (
+                <option key={item.code} value={item.code}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+          <button class="text-button" onClick={() => openOptions()}>⚙ {t('common.options')}</button>
+        </div>
       </header>
       <section class="provider-list" aria-label="Usage providers">
-        {normal.length === 0 && <div class="empty-state"><strong>{dashboard.providers.length === 0 ? 'No providers yet' : 'Nothing captured yet'}</strong><span>{dashboard.providers.length === 0 ? 'Try six URL-only samples, or add your own usage page.' : 'Open a registered usage page to begin.'}</span>{dashboard.providers.length === 0 && <div class="empty-actions"><button class="sample-button" onClick={openSampleOptions}>Try samples ▸</button><button onClick={openUsageGuide}>使い方を見る →</button></div>}</div>}
+        {normal.length === 0 && <div class="empty-state"><strong>{dashboard.providers.length === 0 ? 'No providers yet' : 'Nothing captured yet'}</strong><span>{dashboard.providers.length === 0 ? 'Try six URL-only samples, or add your own usage page.' : 'Open a registered usage page to begin.'}</span>{dashboard.providers.length === 0 && <div class="empty-actions"><button class="sample-button" onClick={openSampleOptions}>Try samples ▸</button><button onClick={openUsageGuide}>{t('usageGuide.link')}</button></div>}</div>}
         {normal.map((provider) => <ProviderRow key={provider.id} provider={provider} snapshot={dashboard.snapshots[provider.id]} state={dashboard.runtimeStates[provider.id]} reload={reload} />)}
       </section>
       {issues.length > 0 && <section class="issues">
@@ -306,7 +356,7 @@ function PopupApp() {
       <footer class="popup-footer">
         <button type="button" class="text-button footer-link" onClick={() => {
           void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?report=1'), active: true });
-        }}>不具合を報告</button>
+        }}>{t('report.link')}</button>
       </footer>
     </div>
   );

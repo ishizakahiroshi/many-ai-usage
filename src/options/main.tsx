@@ -4,6 +4,14 @@ import type { DashboardResponse } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, statusLabel } from '../shared/format';
 import { fileToIconDataUrl } from '../shared/icon';
 import type { ProviderConfig, ProviderMode } from '../shared/schema';
+import {
+  initI18n,
+  listLocales,
+  setStoredUiLocale,
+  UI_LOCALE_STORAGE_KEY,
+  type LocaleCatalog,
+  type TranslateFn,
+} from '../shared/i18n';
 import { buildGitHubIssueUrl, buildReportBody, detectBrowser, githubOpenUserMessage } from '../shared/report';
 import { fetchProvidersRegistry, isSampleProviderId, PROVIDERS_REGISTRY_URL, USAGE_GUIDE_URL } from '../shared/samples';
 import { applyRegistryProviders } from '../shared/storage';
@@ -57,8 +65,11 @@ function OptionsApp() {
   const [reportTitle, setReportTitle] = useState('');
   const [reportDescription, setReportDescription] = useState('');
   const [reportSteps, setReportSteps] = useState('');
-  const [reportMessage, setReportMessage] = useState('');
+  const [reportMessage, setReportMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [reportPreviewOpen, setReportPreviewOpen] = useState(false);
+  const [t, setT] = useState<TranslateFn | null>(null);
+  const [locale, setLocale] = useState('en');
+  const [catalog, setCatalog] = useState<LocaleCatalog | null>(null);
 
   const reload = () => {
     const startedAt = perfNow();
@@ -93,12 +104,26 @@ function OptionsApp() {
         });
       });
   };
+  const applyI18n = () => {
+    void initI18n().then((i18n) => {
+      setT(() => i18n.t);
+      setLocale(i18n.locale);
+      setCatalog(i18n.catalog);
+      obsLog('options.i18n', { locale: i18n.locale });
+    }).catch((error: unknown) => {
+      obsLog('options.i18n.fail', { error: error instanceof Error ? error.name : 'unknown' });
+      // Fallback: identity translator so keys are visible if packs fail to load.
+      setT(() => (key: string) => key);
+    });
+  };
+
   useEffect(() => {
     obsLog('options.boot', {
       hrefPath: window.location.pathname,
       trySamples: new URLSearchParams(window.location.search).get('trySamples') === '1',
       hasProvider: Boolean(bootProviderId),
     });
+    applyI18n();
     reload();
   }, []);
   useEffect(() => {
@@ -110,9 +135,13 @@ function OptionsApp() {
   }, []);
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const onStorageChanged = (_changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+    const onStorageChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area !== 'local') return;
-      obsLog('options.storage.onChanged', { keys: Object.keys(_changes) });
+      if (changes[UI_LOCALE_STORAGE_KEY]) {
+        applyI18n();
+        return;
+      }
+      obsLog('options.storage.onChanged', { keys: Object.keys(changes) });
       // Debounce: rapid multi-key writes (or any residual write storms) must not stack reloads.
       if (debounceTimer != null) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
@@ -306,14 +335,14 @@ function OptionsApp() {
         : 'Sample providers are already registered. Existing settings were not changed.');
       reload();
     } catch (error) {
-      setSamplesError(error instanceof Error ? error.message : 'Unable to fetch sample providers.');
+      setSamplesError(error instanceof Error ? error.message : (t?.('samples.errorFallback') ?? 'Unable to fetch sample providers.'));
     } finally {
       setSamplesLoading(false);
     }
   };
 
   const openReport = () => {
-    setReportMessage('');
+    setReportMessage(null);
     setReportPreviewOpen(false);
     setReportOpen(true);
   };
@@ -327,7 +356,7 @@ function OptionsApp() {
   }, []);
 
   const reportBody = useMemo(() => {
-    if (!dashboard) return '';
+    if (!dashboard || !t) return '';
     return buildReportBody({
       title: reportTitle,
       description: reportDescription,
@@ -338,27 +367,29 @@ function OptionsApp() {
         displayName: provider.displayName,
         status: dashboard.runtimeStates[provider.id]?.status ?? 'never_seen',
       })),
-    });
-  }, [dashboard, reportTitle, reportDescription, reportSteps, extensionVersion]);
+    }, t);
+  }, [dashboard, reportTitle, reportDescription, reportSteps, extensionVersion, t]);
 
   const copyReport = async () => {
+    if (!t) return;
     if (!reportTitle.trim() || !reportDescription.trim()) {
-      setReportMessage('タイトルと「何が起きたか」を入力してください。');
+      setReportMessage({ kind: 'error', text: t('report.validationRequired') });
       return;
     }
     try {
       await navigator.clipboard.writeText(reportBody);
-      setReportMessage('クリップボードにコピーしました。Issue に貼り付けてください。');
+      setReportMessage({ kind: 'ok', text: t('report.copyOk') });
     } catch {
       setReportPreviewOpen(true);
-      setReportMessage('コピーに失敗しました。下の文面を手動で選択してコピーしてください。');
+      setReportMessage({ kind: 'error', text: t('report.copyFail') });
     }
   };
 
   /** Always copy first — Issue Forms often drop ?body= prefill. */
   const openGitHubIssue = async () => {
+    if (!t) return;
     if (!reportTitle.trim() || !reportDescription.trim()) {
-      setReportMessage('タイトルと「何が起きたか」を入力してください。');
+      setReportMessage({ kind: 'error', text: t('report.validationRequired') });
       return;
     }
     let copied = false;
@@ -369,12 +400,16 @@ function OptionsApp() {
       copied = false;
       setReportPreviewOpen(true);
     }
-    const { url, bodyIncluded } = buildGitHubIssueUrl(reportTitle, reportBody);
-    setReportMessage(githubOpenUserMessage(copied, bodyIncluded));
+    const { url, bodyIncluded } = buildGitHubIssueUrl(reportTitle, reportBody, t);
+    setReportMessage({
+      kind: copied ? 'ok' : 'error',
+      text: githubOpenUserMessage(copied, bodyIncluded, t),
+    });
     void chrome.tabs.create({ url, active: true });
   };
 
-  if (!dashboard) return <div class="options-loading">Loading settings…</div>;
+  if (!dashboard || !t) return <div class="options-loading">{t?.('common.loading') ?? 'Loading…'}</div>;
+  const localeOptions = catalog ? listLocales(catalog) : [{ code: locale, label: locale }];
   return (
     <div class="options-shell">
       <header class="options-header">
@@ -383,7 +418,24 @@ function OptionsApp() {
           <strong>many-ai-usage</strong>
           <span>Settings · v{extensionVersion}</span>
         </div>
-        <span class="privacy-note">Local-only · read-only page capture</span>
+        <div class="header-actions">
+          <label class="locale-select-wrap">
+            <span class="visually-hidden">{t('common.language')}</span>
+            <select
+              class="locale-select"
+              value={locale}
+              aria-label={t('common.language')}
+              onChange={(event) => {
+                void setStoredUiLocale(event.currentTarget.value).then(() => applyI18n());
+              }}
+            >
+              {localeOptions.map((item) => (
+                <option key={item.code} value={item.code}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+          <span class="privacy-note">Local-only · read-only page capture</span>
+        </div>
       </header>
       <div class="options-layout">
         <aside class="sidebar">
@@ -392,7 +444,7 @@ function OptionsApp() {
             <strong>Need a starting point?</strong>
             <span>Fetch six URL-only samples, then teach the values you want to track.</span>
             <button class="samples-button" onClick={openSamplesDialog}>Try samples ▸</button>
-            <a href={USAGE_GUIDE_URL} target="_blank" rel="noopener noreferrer">使い方を見る →</a>
+            <a href={USAGE_GUIDE_URL} target="_blank" rel="noopener noreferrer">{t('usageGuide.link')}</a>
           </div>}
           <div class="sidebar-label">Registered providers</div>
           <div class="provider-sidebar-list">
@@ -405,12 +457,12 @@ function OptionsApp() {
                 {provider.iconDataUrl
                   ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" />
                   : <span class="provider-icon placeholder" aria-hidden="true" />}
-                <span class="sidebar-provider-main"><strong>{provider.displayName}</strong><small>{lowest != null ? `${Math.round(lowest)}% remaining` : state.status === 'needs_permission' ? 'Needs access' : snapshot?.source === 'page_only' ? 'tile' : 'Not captured'}</small></span><span class={`sidebar-state ${state.status}`}>{state.status === 'needs_permission' ? '要許可' : snapshot?.source === 'page_only' ? 'tile' : ''}</span>
+                <span class="sidebar-provider-main"><strong>{provider.displayName}</strong><small>{lowest != null ? `${Math.round(lowest)}% remaining` : state.status === 'needs_permission' ? 'Needs access' : snapshot?.source === 'page_only' ? 'tile' : 'Not captured'}</small></span><span class={`sidebar-state ${state.status}`}>{state.status === 'needs_permission' ? t('sidebar.needsPermission') : snapshot?.source === 'page_only' ? 'tile' : ''}</span>
               </button>;
             })}
           </div>
           <div class="sidebar-footer">
-            <button type="button" class="report-link-button" onClick={openReport}>不具合を報告 / Report</button>
+            <button type="button" class="report-link-button" onClick={openReport}>{t('report.link')}</button>
           </div>
         </aside>
         <main class="main-panel">
@@ -462,40 +514,40 @@ function OptionsApp() {
       </div>
       {samplesDialogOpen && <div class="samples-dialog-backdrop">
         <section class="samples-dialog" role="dialog" aria-modal="true" aria-labelledby="samples-dialog-title">
-          <h2 id="samples-dialog-title">Try sample providers?</h2>
-          <p>以下のURLから、6サービス分のサンプル設定を取得します。</p>
+          <h2 id="samples-dialog-title">{t('samples.dialogTitle')}</h2>
+          <p>{t('samples.dialogLead')}</p>
           <code>{PROVIDERS_REGISTRY_URL}</code>
-          <p>取得するのは表示名とURLパターンだけです。selector・Cookie・トークン・usage値は含まれません。登録後、各ページで追跡したい数値をteach-modeで教えてください。</p>
+          <p>{t('samples.dialogBody')}</p>
           {samplesError && <p class="samples-error" role="alert">{samplesError}</p>}
           <div class="samples-dialog-actions">
-            <button disabled={samplesLoading} onClick={() => setSamplesDialogOpen(false)}>キャンセル</button>
-            <button class="primary-button" disabled={samplesLoading} onClick={() => void importSamples()}>{samplesLoading ? '取得中…' : samplesError ? '再試行' : '取得する'}</button>
+            <button disabled={samplesLoading} onClick={() => setSamplesDialogOpen(false)}>{t('common.cancel')}</button>
+            <button class="primary-button" disabled={samplesLoading} onClick={() => void importSamples()}>{samplesLoading ? t('samples.fetching') : samplesError ? t('common.retry') : t('samples.fetch')}</button>
           </div>
         </section>
       </div>}
       {reportOpen && <div class="samples-dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setReportOpen(false); }}>
         <section class="samples-dialog report-dialog" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title">
-          <h2 id="report-dialog-title">不具合を報告 / Report a problem</h2>
-          <p class="report-privacy-note">Cookie・トークン・実利用量・ページ本文・アカウント情報は書かないでください。自動埋め込みは拡張バージョン・ブラウザ種別・provider の表示名と状態のみです。「GitHub で開く」は先にクリップボードへコピーします（Issue フォームでは本文の自動入力が効かないことがあります）。</p>
-          <label class="report-field">タイトル（必須）
-            <input value={reportTitle} onInput={(event) => { setReportTitle(event.currentTarget.value); setReportMessage(''); }} placeholder="例: Re-teach 後に値が保存されない" maxLength={120} />
+          <h2 id="report-dialog-title">{t('report.dialogTitle')}</h2>
+          <p class="report-privacy-note">{t('report.privacyNote')}</p>
+          <label class="report-field">{t('report.titleLabel')}
+            <input value={reportTitle} onInput={(event) => { setReportTitle(event.currentTarget.value); setReportMessage(null); }} placeholder={t('report.titlePlaceholder')} maxLength={120} />
           </label>
-          <label class="report-field">何が起きたか（必須）
-            <textarea value={reportDescription} onInput={(event) => { setReportDescription(event.currentTarget.value); setReportMessage(''); }} rows={4} placeholder="期待した動きと実際の動き" maxLength={2000} />
+          <label class="report-field">{t('report.descriptionLabel')}
+            <textarea value={reportDescription} onInput={(event) => { setReportDescription(event.currentTarget.value); setReportMessage(null); }} rows={4} placeholder={t('report.descriptionPlaceholder')} maxLength={2000} />
           </label>
-          <label class="report-field">再現手順（任意）
-            <textarea value={reportSteps} onInput={(event) => { setReportSteps(event.currentTarget.value); setReportMessage(''); }} rows={3} placeholder="1. …&#10;2. …" maxLength={2000} />
+          <label class="report-field">{t('report.stepsLabel')}
+            <textarea value={reportSteps} onInput={(event) => { setReportSteps(event.currentTarget.value); setReportMessage(null); }} rows={3} placeholder={t('report.stepsPlaceholder')} maxLength={2000} />
           </label>
-          <p class="help-text">スクショを付ける場合は、個人情報が写らないように隠してから添付してください。</p>
+          <p class="help-text">{t('report.screenshotHint')}</p>
           <details class="report-preview" open={reportPreviewOpen || undefined} onToggle={(event) => setReportPreviewOpen((event.currentTarget as HTMLDetailsElement).open)}>
-            <summary>生成されるレポート文面</summary>
+            <summary>{t('report.previewSummary')}</summary>
             <pre>{reportBody}</pre>
           </details>
-          {reportMessage && <p class={`report-status ${reportMessage.includes('失敗') || reportMessage.includes('入力') ? 'is-error' : ''}`} role="status">{reportMessage}</p>}
+          {reportMessage && <p class={`report-status ${reportMessage.kind === 'error' ? 'is-error' : ''}`} role="status">{reportMessage.text}</p>}
           <div class="samples-dialog-actions report-actions">
-            <button type="button" onClick={() => setReportOpen(false)}>閉じる</button>
-            <button type="button" onClick={() => void copyReport()}>レポートをコピー</button>
-            <button type="button" class="primary-button" onClick={() => void openGitHubIssue()}>GitHub で開く</button>
+            <button type="button" onClick={() => setReportOpen(false)}>{t('common.close')}</button>
+            <button type="button" onClick={() => void copyReport()}>{t('report.copy')}</button>
+            <button type="button" class="primary-button" onClick={() => void openGitHubIssue()}>{t('report.openGitHub')}</button>
           </div>
         </section>
       </div>}
