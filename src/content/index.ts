@@ -2,7 +2,7 @@ import type { ProviderContext } from '../shared/messages';
 import type { NormalizedSnapshot } from '../shared/schema';
 import { sendMessage } from '../shared/runtime';
 import { readTaught } from './teach/read';
-import { startPicker } from './teach/picker';
+import { isPickerActive, startPicker } from './teach/picker';
 
 let lastCapturedUrl: string | null = null;
 let captureInFlight = false;
@@ -84,17 +84,36 @@ async function capture(force = false): Promise<void> {
   }
 }
 
+function removeOrphanPickers(): void {
+  // Never strip a live picker owned by this content-script isolate.
+  if (isPickerActive()) return;
+  // Extension reload invalidates content-script JS but can leave a dead full-screen host in the DOM.
+  document.querySelectorAll('[data-many-ai-usage-picker]').forEach((node) => node.remove());
+}
+
 chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
+  if (message.type === 'PING') {
+    sendResponse({ ok: true, pickerActive: isPickerActive() });
+    return false;
+  }
   if (message.type === 'START_PICKER' && 'providerId' in message) {
     const metricId = 'metricId' in message && typeof message.metricId === 'string' ? message.metricId : undefined;
     const pickerMode = 'pickerMode' in message && message.pickerMode === 'reset' ? 'reset' : 'metrics';
+    // startPicker itself replaces any previous host; do not removeOrphan first (re-inject races).
     startPicker(String(message.providerId), metricId, pickerMode);
     sendResponse({ ok: true });
     return false;
   }
   if (message.type !== 'CAPTURE_NOW') return false;
+  // Avoid heavy capture work while the user is teaching — SPA re-injects used to race and clear the panel.
+  if (isPickerActive()) {
+    sendResponse({ ok: true, skipped: 'picker_active' });
+    return false;
+  }
   void capture(true).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: String(error) }));
   return true;
 });
 
+// Do not call removeOrphanPickers() on load: re-executing content.js in a new isolate would
+// delete the previous isolate's open picker host ("panel flashes then vanishes").
 void capture();

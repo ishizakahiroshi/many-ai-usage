@@ -25,9 +25,41 @@ export function sameOriginAndPath(left: string, right: string): boolean {
   }
 }
 
+/** Match registry patterns such as `https://claude.ai/*` or exact provider URLs. */
+export function matchesUrlPattern(pattern: string, currentUrl: string): boolean {
+  try {
+    const current = new URL(currentUrl);
+    if (pattern.endsWith('/*')) {
+      const prefix = pattern.slice(0, -1); // keep trailing slash intent: origin + /
+      const base = new URL(prefix);
+      return current.origin === base.origin && (current.pathname.startsWith(base.pathname) || base.pathname === '/');
+    }
+    if (pattern.endsWith('*')) {
+      const prefix = pattern.slice(0, -1);
+      return currentUrl.startsWith(prefix) || urlWithoutHash(currentUrl).startsWith(urlWithoutHash(prefix));
+    }
+    return sameOriginAndPath(pattern, currentUrl);
+  } catch {
+    return false;
+  }
+}
+
 export function matchesProviderUrl(provider: ProviderConfig, currentUrl: string): boolean {
-  if (!sameOriginAndPath(provider.url, currentUrl)) return false;
-  return true;
+  if (sameOriginAndPath(provider.url, currentUrl)) return true;
+  for (const pattern of provider.urlMatch ?? []) {
+    if (matchesUrlPattern(pattern, currentUrl)) return true;
+  }
+  try {
+    const registered = new URL(provider.url);
+    const current = new URL(currentUrl);
+    const registeredPath = registered.pathname.replace(/\/$/, '') || '/';
+    if (registered.origin === current.origin && (current.pathname === registeredPath || current.pathname.startsWith(`${registeredPath}/`))) {
+      return true;
+    }
+  } catch {
+    /* ignore invalid URLs */
+  }
+  return false;
 }
 
 export function originChanged(previous: string, next: string): boolean {

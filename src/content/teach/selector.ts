@@ -96,7 +96,10 @@ export function matchesFingerprint(element: Element, fingerprint: AnchorFingerpr
 
 export function findByFingerprint(root: Document, fingerprint: AnchorFingerprint): Element | null {
   const candidates = Array.from(root.querySelectorAll('*')).filter((element) => matchesFingerprint(element, fingerprint));
-  return candidates.length === 1 ? candidates[0] : null;
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+  // Prefer the most compact match when SPA re-renders leave multiple fingerprint hits.
+  return candidates.sort((left, right) => (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0))[0] ?? null;
 }
 
 export function buildCssPath(element: Element, root: Document = element.ownerDocument): string {

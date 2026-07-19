@@ -2,6 +2,7 @@ import { render } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DashboardResponse } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, statusLabel } from '../shared/format';
+import { fileToIconDataUrl } from '../shared/icon';
 import type { ProviderConfig, ProviderMode } from '../shared/schema';
 import { fetchProvidersRegistry, isSampleProviderId, PROVIDERS_REGISTRY_URL, USAGE_GUIDE_URL } from '../shared/samples';
 import { applyRegistryProviders } from '../shared/storage';
@@ -9,15 +10,15 @@ import { sendMessage } from '../shared/runtime';
 import { originChanged, originPattern, urlWithoutHash } from '../shared/url';
 import './styles.css';
 
-type ProviderDraft = Pick<ProviderConfig, 'id' | 'displayName' | 'url' | 'refreshIntervalMinutes' | 'mode' | 'order' | 'createdAt' | 'updatedAt'>;
+type ProviderDraft = Pick<ProviderConfig, 'id' | 'displayName' | 'url' | 'refreshIntervalMinutes' | 'mode' | 'order' | 'createdAt' | 'updatedAt' | 'iconDataUrl'>;
 
 function blankDraft(order = 0): ProviderDraft {
-  return { id: '', displayName: '', url: '', refreshIntervalMinutes: 15, mode: 'auto', order, createdAt: '', updatedAt: '' };
+  return { id: '', displayName: '', url: '', refreshIntervalMinutes: 15, mode: 'auto', order, createdAt: '', updatedAt: '', iconDataUrl: undefined };
 }
 
 function draftFrom(provider: ProviderConfig): ProviderDraft {
-  const { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt } = provider;
-  return { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt };
+  const { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt, iconDataUrl } = provider;
+  return { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt, iconDataUrl };
 }
 
 function validUrl(value: string): boolean {
@@ -111,6 +112,7 @@ function OptionsApp() {
       displayEnabled: true,
       refreshIntervalMinutes: Math.max(3, Math.min(240, Number(draft.refreshIntervalMinutes) || 15)),
       metrics: existing?.metrics ?? [],
+      ...(draft.iconDataUrl ? { iconDataUrl: draft.iconDataUrl } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       order: existing?.order ?? draft.order,
@@ -151,12 +153,35 @@ function OptionsApp() {
       reload();
       return;
     }
+    // Keep this options tab alive so Done/Cancel can return here and later popup opens still find it.
+    try {
+      const tab = await chrome.tabs.getCurrent();
+      if (tab?.id != null) await chrome.tabs.update(tab.id, { autoDiscardable: false });
+    } catch {
+      /* options may not expose getCurrent in all hosts */
+    }
     const result = await sendMessage<{ started?: boolean }>({ type: 'START_PICKER', providerId: selectedProvider.id, metricId, pickerMode });
     setMessage(result?.started === false
       ? 'Unable to open the registered page. Check host access and try again.'
       : pickerMode === 'reset'
         ? 'A new teaching tab opened. Choose the reset date or countdown, then select Done and return.'
         : 'A new teaching tab opened. Choose one or more usage values, then select Done and return.');
+  };
+
+  const onIconFile = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const iconDataUrl = await fileToIconDataUrl(file);
+      updateDraft('iconDataUrl', iconDataUrl);
+      setMessage('Icon ready. Save to apply.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to read that image.');
+    }
+  };
+
+  const clearIcon = () => {
+    updateDraft('iconDataUrl', undefined);
+    setMessage('Icon cleared. Save to apply.');
   };
 
   const renameMetric = async (metricId: string, currentLabel: string) => {
@@ -231,7 +256,11 @@ function OptionsApp() {
               const snapshot = dashboard.snapshots[provider.id];
               const lowest = snapshot?.metrics.map(remainingPercent).filter((value): value is number => value != null).sort((a, b) => a - b)[0];
               return <button key={provider.id} class={`sidebar-provider ${selectedId === provider.id ? 'selected' : ''}`} draggable onDragStart={() => setDraggedId(provider.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => draggedId && void reorder(draggedId, provider.id)} onClick={() => select(provider.id)}>
-                <span class="drag-handle">☰</span><span class="sidebar-provider-main"><strong>{provider.displayName}</strong><small>{lowest != null ? `${Math.round(lowest)}% remaining` : state.status === 'needs_permission' ? 'Needs access' : snapshot?.source === 'page_only' ? 'tile' : 'Not captured'}</small></span><span class={`sidebar-state ${state.status}`}>{state.status === 'needs_permission' ? '要許可' : snapshot?.source === 'page_only' ? 'tile' : ''}</span>
+                <span class="drag-handle">☰</span>
+                {provider.iconDataUrl
+                  ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" />
+                  : <span class="provider-icon placeholder" aria-hidden="true" />}
+                <span class="sidebar-provider-main"><strong>{provider.displayName}</strong><small>{lowest != null ? `${Math.round(lowest)}% remaining` : state.status === 'needs_permission' ? 'Needs access' : snapshot?.source === 'page_only' ? 'tile' : 'Not captured'}</small></span><span class={`sidebar-state ${state.status}`}>{state.status === 'needs_permission' ? '要許可' : snapshot?.source === 'page_only' ? 'tile' : ''}</span>
               </button>;
             })}
           </div>
@@ -244,7 +273,39 @@ function OptionsApp() {
           {selectedProvider && selectedState?.status === 'needs_permission' && <div class="permission-callout"><div><strong>Host access is required</strong><span>Allow access to parse visible usage data in your browser session.</span></div><div><button onClick={() => void allowSelected()}>Allow access</button><button class="danger-button" onClick={() => void remove()}>Delete</button></div></div>}
           {selectedId === 'new' || selectedProvider ? <>
             {selectedProvider && <section class="current-section"><div class="section-heading"><h2>Current usage</h2><div class="section-actions"><button onClick={() => void sendMessage({ type: 'REFRESH_PROVIDER', providerId: selectedProvider.id }).then(reload)}>↻ Refresh now</button><button onClick={() => void sendMessage({ type: 'OPEN_PROVIDER', providerId: selectedProvider.id })}>↗ Open page</button></div></div>{selectedSnapshot?.metrics.length ? <div class="metric-grid">{selectedSnapshot.metrics.map((metric) => <div class="metric-card" key={metric.id}><span>{metric.window.label}</span><strong>{formatMetric(metric)}</strong><small>{metric.label}</small></div>)}</div> : <div class="no-metrics">No normalized usage values yet. Open the registered page after allowing host access.</div>}</section>}
-            <section class="form-section"><div class="section-heading"><h2>Provider settings</h2><span>URL and display settings</span></div><label>Display name<input value={draft.displayName} onInput={(event) => updateDraft('displayName', event.currentTarget.value)} placeholder="Example AI" /></label><label>Usage page URL<input value={draft.url} onInput={(event) => updateDraft('url', event.currentTarget.value)} placeholder="https://example.com/account/usage" /></label><p class="help-text">The page is read in your browser session. Cookies, tokens, and raw HTML are never stored or sent elsewhere.</p><div class="form-grid"><label>Refresh interval (minutes)<input type="number" min="3" max="240" value={draft.refreshIntervalMinutes} onInput={(event) => updateDraft('refreshIntervalMinutes', Number(event.currentTarget.value))} /></label><label>Mode<select value={draft.mode} onChange={(event) => updateDraft('mode', event.currentTarget.value as ProviderMode)}><option value="auto">Auto detect (candidate preview)</option><option value="taught">User taught</option><option value="embed">Page tile</option></select></label></div>{selectedProvider && <div class="teach-panel"><div><strong>Teach this page</strong><p class="help-text">A new tab opens with a continuous picker. Click every usage value you want to track, then select Done and return.</p></div><button class="primary-button" onClick={() => void trackSelected()}>＋ Track this element</button></div>}{selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics"><strong>Tracked elements</strong>{selectedProvider.metrics.map((metric) => { const lastValue = selectedSnapshot?.metrics.find((item) => item.id === metric.metricId); return <div class="taught-metric" key={metric.metricId}><span><b>{metric.label}</b><small>{metric.windowLabel ?? '—'} · {metric.valueAnchor?.selectors[0] ?? 'no selector'} · last: {lastValue ? formatMetric(lastValue) : 'not read'}</small></span><span class="metric-actions"><button onClick={() => void renameMetric(metric.metricId, metric.label)}>Rename</button><button onClick={() => void trackSelected(metric.metricId)}>Re-teach value</button><button onClick={() => void trackSelected(metric.metricId, 'reset')}>Re-teach reset</button><button onClick={() => void removeMetric(metric.metricId)}>Delete</button></span></div>; })}</div>}</section>
+            <section class="form-section">
+              <div class="section-heading"><h2>Provider settings</h2><span>URL and display settings</span></div>
+              <label>Display name<input value={draft.displayName} onInput={(event) => updateDraft('displayName', event.currentTarget.value)} placeholder="Example AI" /></label>
+              <label>Usage page URL<input value={draft.url} onInput={(event) => updateDraft('url', event.currentTarget.value)} placeholder="https://example.com/account/usage" /></label>
+              <p class="help-text">The page is read in your browser session. Cookies, tokens, and raw HTML are never stored or sent elsewhere.</p>
+              <div class="icon-field">
+                <div class="icon-preview-wrap">
+                  {draft.iconDataUrl
+                    ? <img class="icon-preview" src={draft.iconDataUrl} alt="" />
+                    : <span class="icon-preview placeholder" aria-hidden="true" />}
+                  <div>
+                    <strong>Custom icon</strong>
+                    <p class="help-text">Optional. Upload your own image — provider brand/favicon is never auto-loaded (trademark &amp; privacy). Stored only in this browser.</p>
+                    <div class="icon-actions">
+                      <label class="file-button">
+                        Choose image
+                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(event) => {
+                          const input = event.currentTarget;
+                          void onIconFile(input.files?.[0] ?? null).finally(() => { input.value = ''; });
+                        }} />
+                      </label>
+                      <button type="button" disabled={!draft.iconDataUrl} onClick={clearIcon}>Remove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label>Refresh interval (minutes)<input type="number" min="3" max="240" value={draft.refreshIntervalMinutes} onInput={(event) => updateDraft('refreshIntervalMinutes', Number(event.currentTarget.value))} /></label>
+                <label>Mode<select value={draft.mode} onChange={(event) => updateDraft('mode', event.currentTarget.value as ProviderMode)}><option value="auto">Auto detect (candidate preview)</option><option value="taught">User taught</option><option value="embed">Page tile</option></select></label>
+              </div>
+              {selectedProvider && <div class="teach-panel"><div><strong>Teach this page</strong><p class="help-text">A new tab opens with a continuous picker. Click every usage value you want to track, then select Done and return.</p></div><button class="primary-button" onClick={() => void trackSelected()}>＋ Track this element</button></div>}
+              {selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics"><strong>Tracked elements</strong>{selectedProvider.metrics.map((metric) => { const lastValue = selectedSnapshot?.metrics.find((item) => item.id === metric.metricId); return <div class="taught-metric" key={metric.metricId}><span><b>{metric.label}</b><small>{metric.windowLabel ?? '—'} · {metric.valueAnchor?.selectors[0] ?? 'no selector'} · last: {lastValue ? formatMetric(lastValue) : 'not read'}</small></span><span class="metric-actions"><button onClick={() => void renameMetric(metric.metricId, metric.label)}>Rename</button><button onClick={() => void trackSelected(metric.metricId)}>Re-teach value</button><button onClick={() => void trackSelected(metric.metricId, 'reset')}>Re-teach reset</button><button onClick={() => void removeMetric(metric.metricId)}>Delete</button></span></div>; })}</div>}
+            </section>
             {selectedProvider && <section class="diagnostic-section"><div class="section-heading"><h2>Diagnostics</h2><span>{selectedState?.errorLabel ?? 'Evidence summary'}</span></div><dl class="diagnostic-grid"><dt>Status</dt><dd>{selectedState?.status ?? 'never_seen'}</dd><dt>Source</dt><dd>{selectedSnapshot?.source ?? '—'}</dd><dt>Confidence</dt><dd>{selectedState?.confidence ?? 'none'}</dd><dt>Last captured</dt><dd>{ageLabel(selectedSnapshot?.capturedAt ?? null)}</dd><dt>Stale threshold</dt><dd>{draft.refreshIntervalMinutes * 2} minutes</dd><dt>Evidence</dt><dd>{selectedState?.evidenceSummary.join(' · ') || '—'}</dd></dl></section>}
             <div class="form-footer"><button class="danger-button" disabled={!selectedProvider} onClick={() => void remove()}>Delete</button><div><button disabled={!dirty} onClick={() => { if (selectedProvider) setDraft(draftFrom(selectedProvider)); else setDraft(blankDraft(dashboard.providers.length)); setDirty(false); setMessage(''); }}>Discard changes</button><button class="primary-button" disabled={!dirty} onClick={() => void save()}>Save</button></div></div>
             {message && <p class="save-message" role="status">{message}</p>}

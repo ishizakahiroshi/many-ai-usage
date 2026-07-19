@@ -45,6 +45,9 @@ export interface TaughtMetric {
   enabled: boolean;
 }
 
+/** Max length of a browser-local custom icon data URL (resized PNG ~64×64 stays well under this). */
+export const ICON_DATA_URL_MAX_LENGTH = 100_000;
+
 export interface ProviderConfig {
   schema: 'many-ai-usage.provider.v1';
   id: string;
@@ -55,6 +58,8 @@ export interface ProviderConfig {
   displayEnabled: boolean;
   refreshIntervalMinutes: number;
   metrics: TaughtMetric[];
+  /** User-uploaded icon as a data URL. Never auto-fetched from the provider host (trademark / privacy). */
+  iconDataUrl?: string;
   createdAt: string;
   updatedAt: string;
   order: number;
@@ -136,6 +141,11 @@ export const providerConfigSchema = v.object({
   displayEnabled: v.boolean(),
   refreshIntervalMinutes: v.pipe(v.number(), v.minValue(3), v.maxValue(240)),
   metrics: v.array(taughtMetricSchema),
+  iconDataUrl: v.optional(v.pipe(
+    v.string(),
+    v.regex(/^data:image\/(png|jpeg|jpg|webp|gif);base64,/i),
+    v.maxLength(ICON_DATA_URL_MAX_LENGTH),
+  )),
   createdAt: v.pipe(v.string(), v.isoTimestamp()),
   updatedAt: v.pipe(v.string(), v.isoTimestamp()),
   order: v.number(),

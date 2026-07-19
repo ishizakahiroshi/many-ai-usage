@@ -1,5 +1,14 @@
 import type { RuntimeMessage, ProviderContext } from '../shared/messages';
-import { isStale, makeRuntimeState, type ProviderConfig, type ProviderRuntimeState, type TaughtMetric } from '../shared/schema';
+import {
+  isStale,
+  makeRuntimeState,
+  type MetricUnit,
+  type NormalizedMetric,
+  type NormalizedSnapshot,
+  type ProviderConfig,
+  type ProviderRuntimeState,
+  type TaughtMetric,
+} from '../shared/schema';
 import {
   deleteProvider,
   clearSnapshot,
@@ -13,13 +22,29 @@ import {
   setSnapshot,
   upsertProvider,
 } from '../shared/storage';
-import { matchesProviderUrl, originPattern, sameOriginAndPath } from '../shared/url';
+import { matchesProviderUrl, originPattern } from '../shared/url';
 
 const pendingRefreshes = new Map<string, number>();
 type PickerMode = 'metrics' | 'reset';
-type TeachSession = { providerId: string; returnTabId?: number; metricId?: string; pickerMode: PickerMode; metrics: TaughtMetric[] };
+export type LiveMetricRead = {
+  value: number;
+  used: number | null;
+  remaining: number | null;
+  total: number | null;
+  unit: MetricUnit;
+  evidence: string;
+  semanticSignals: string[];
+};
+type TeachSession = {
+  providerId: string;
+  returnTabId?: number;
+  metricId?: string;
+  pickerMode: PickerMode;
+  metrics: TaughtMetric[];
+  liveReads: Record<string, LiveMetricRead>;
+};
 
-const pendingPickers = new Map<number, Omit<TeachSession, 'metrics'>>();
+const pendingPickers = new Map<number, Omit<TeachSession, 'metrics' | 'liveReads'>>();
 const teachSessions = new Map<number, TeachSession>();
 const injectionInFlight = new Set<string>();
 
@@ -93,15 +118,43 @@ async function updateFailure(providerId: string, reason: string): Promise<void> 
   });
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function contentScriptReady(tabId: number): Promise<boolean> {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureContentScript(tabId: number): Promise<boolean> {
+  if (await contentScriptReady(tabId)) return true;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if (await contentScriptReady(tabId)) return true;
+      await delay(40 * (attempt + 1));
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function injectCapture(tabId: number, provider: ProviderConfig, force = false): Promise<boolean> {
   const key = `${tabId}:${provider.id}`;
   if (injectionInFlight.has(key)) return false;
   injectionInFlight.add(key);
   try {
     if (!(await hasPermission(provider))) return false;
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    // Re-executing content.js creates a new isolate that used to delete the open picker host.
+    if (!(await ensureContentScript(tabId))) return false;
     if (force) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await delay(50);
       await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW' });
     }
     return true;
@@ -110,6 +163,45 @@ async function injectCapture(tabId: number, provider: ProviderConfig, force = fa
     return false;
   } finally {
     injectionInFlight.delete(key);
+  }
+}
+
+async function sendStartPicker(tabId: number, providerId: string, metricId: string | undefined, pickerMode: PickerMode): Promise<boolean> {
+  if (!(await ensureContentScript(tabId))) return false;
+  // Content script may not be listening on the first tick after executeScript.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: 'START_PICKER', providerId, metricId, pickerMode });
+      return true;
+    } catch {
+      await delay(40 * (attempt + 1));
+    }
+  }
+  return false;
+}
+
+async function handleProviderTabReady(tabId: number, currentUrl: string): Promise<void> {
+  const providers = (await getDashboard()).providers;
+  for (const provider of providers) {
+    if (!matchesProviderUrl(provider, currentUrl)) continue;
+    const pendingPicker = pendingPickers.get(tabId);
+    // An open teach session must not be disturbed by later complete/SPA events.
+    if (teachSessions.has(tabId) && !pendingPicker) continue;
+    await injectCapture(tabId, provider);
+    if (pendingPicker?.providerId === provider.id) {
+      pendingPickers.delete(tabId);
+      teachSessions.set(tabId, {
+        providerId: provider.id,
+        returnTabId: pendingPicker.returnTabId,
+        metricId: pendingPicker.metricId,
+        pickerMode: pendingPicker.pickerMode,
+        metrics: [],
+        liveReads: {},
+      });
+      const started = await sendStartPicker(tabId, provider.id, pendingPicker.metricId, pendingPicker.pickerMode);
+      if (!started) teachSessions.delete(tabId);
+    }
+    if (pendingRefreshes.get(provider.id) === tabId) pendingRefreshes.delete(provider.id);
   }
 }
 
@@ -142,8 +234,16 @@ export async function startPicker(providerId: string, metricId?: string, sender?
   if (!(await hasPermission(provider))) return { started: false };
   const active = sender?.tab?.id != null ? sender.tab : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
   const created = await chrome.tabs.create({ url: provider.url, active: true });
-  if (created.id != null) pendingPickers.set(created.id, { providerId, metricId, returnTabId: active?.id, pickerMode });
-  return { started: created.id != null, tabId: created.id };
+  if (created.id == null) return { started: false };
+  pendingPickers.set(created.id, { providerId, metricId, returnTabId: active?.id, pickerMode });
+  // tabs.create can finish loading before onUpdated('complete') is observed — kick picker if already ready.
+  try {
+    const tab = await chrome.tabs.get(created.id);
+    if (tab.status === 'complete' && tab.url) await handleProviderTabReady(created.id, tab.url);
+  } catch {
+    /* onUpdated will retry when navigation completes */
+  }
+  return { started: true, tabId: created.id };
 }
 
 function stagedSession(message: { providerId: string }, sender?: chrome.runtime.MessageSender) {
@@ -153,11 +253,110 @@ function stagedSession(message: { providerId: string }, sender?: chrome.runtime.
   return session?.providerId === message.providerId ? { tabId, session } : null;
 }
 
+function optionsPageUrl(): string {
+  return chrome.runtime.getURL('options.html');
+}
+
+function isOptionsTabUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  const base = optionsPageUrl();
+  // Match options.html with or without query (trySamples=1) / hash.
+  return url === base || url.startsWith(`${base}?`) || url.startsWith(`${base}#`);
+}
+
+async function findOptionsTabs(): Promise<chrome.tabs.Tab[]> {
+  const tabs = await chrome.tabs.query({});
+  return tabs.filter((tab) => {
+    // Discarded / mid-load tabs often expose pendingUrl instead of url.
+    const candidate = tab.url ?? (tab as chrome.tabs.Tab & { pendingUrl?: string }).pendingUrl;
+    return isOptionsTabUrl(candidate);
+  });
+}
+
+/**
+ * Focus an existing options tab, or open a fresh one.
+ * Always re-navigates to the current extension URL: after chrome://extensions reload,
+ * old options tabs still match the URL but show a dead "Extension page" error until refreshed.
+ * chrome.runtime.openOptionsPage() can "succeed" while only focusing that zombie tab.
+ */
+export async function openOptionsPageReliable(): Promise<{ opened: boolean; tabId?: number }> {
+  const url = optionsPageUrl();
+  const existing = (await findOptionsTabs())[0];
+  if (existing?.id != null) {
+    try {
+      // Force a live navigation every time (not only when discarded).
+      await chrome.tabs.update(existing.id, { url, active: true, autoDiscardable: false });
+      if (existing.windowId != null) await chrome.windows.update(existing.windowId, { focused: true });
+      return { opened: true, tabId: existing.id };
+    } catch {
+      /* fall through and create */
+    }
+  }
+  try {
+    const created = await chrome.tabs.create({ url, active: true });
+    return { opened: created.id != null, tabId: created.id };
+  } catch {
+    // Last resort for hosts that only allow the options API.
+    try {
+      await chrome.runtime.openOptionsPage();
+      return { opened: true };
+    } catch {
+      return { opened: false };
+    }
+  }
+}
+
 async function restoreTeachOrigin(tabId: number, returnTabId?: number): Promise<void> {
   try { await chrome.tabs.remove(tabId); } catch { /* The user may already have closed the picker tab. */ }
   if (returnTabId != null) {
-    try { await chrome.tabs.update(returnTabId, { active: true }); } catch { /* The originating tab may no longer exist. */ }
+    try {
+      await chrome.tabs.update(returnTabId, { active: true });
+      const tab = await chrome.tabs.get(returnTabId);
+      if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true });
+      return;
+    } catch {
+      /* Origin tab may be gone — fall back to options. */
+    }
   }
+  await openOptionsPageReliable();
+}
+
+function snapshotFromLiveReads(provider: ProviderConfig, session: TeachSession, now = new Date().toISOString()): NormalizedSnapshot | null {
+  const metrics: NormalizedMetric[] = [];
+  for (const taught of session.metrics) {
+    const live = session.liveReads[taught.metricId];
+    if (!live) continue;
+    const interpretation = taught.interpretation ?? 'unknown';
+    const used = interpretation === 'used_percent' || interpretation === 'used_total' ? live.used ?? live.value : live.used;
+    const remaining = interpretation === 'remaining_percent' || interpretation === 'remaining_total' || interpretation === 'absolute_value' || taught.unit === 'percent'
+      ? live.remaining ?? live.value
+      : live.remaining;
+    metrics.push({
+      id: taught.metricId,
+      label: taught.label,
+      kind: taught.kind,
+      unit: taught.unit === 'custom' ? live.unit : taught.unit,
+      window: { id: taught.metricId, label: taught.windowLabel ?? taught.label },
+      used,
+      remaining,
+      total: live.total ?? (taught.unit === 'percent' || live.unit === 'percent' ? 100 : null),
+      resetAt: null,
+      resetLabel: null,
+      confidence: 'taught',
+      evidence: { value: live.evidence, label: taught.label, reset: null, semanticSignals: live.semanticSignals },
+    });
+  }
+  if (metrics.length === 0) return null;
+  return {
+    providerId: provider.id,
+    displayName: provider.displayName,
+    capturedAt: now,
+    source: 'user_taught',
+    status: 'ok',
+    metrics,
+    warningReason: null,
+    lastFailureReason: null,
+  };
 }
 
 async function saveCompletedTeach(tabId: number, session: TeachSession): Promise<boolean> {
@@ -170,10 +369,16 @@ async function saveCompletedTeach(tabId: number, session: TeachSession): Promise
     else metrics.push(staged);
   }
   const now = new Date().toISOString();
-  await upsertProvider({ ...provider, mode: 'taught', metrics, updatedAt: now });
-  const state = await getRuntimeState(provider.id);
-  await setRuntimeState({ ...state, status: 'never_seen', confidence: 'taught', errorLabel: null, consecutiveFailures: 0 });
-  try { await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW' }); } catch { /* The next visit/manual refresh will capture it. */ }
+  const nextProvider = { ...provider, mode: 'taught' as const, metrics, updatedAt: now };
+  await upsertProvider(nextProvider);
+  // Persist values observed at click time so the dashboard is not empty when re-query fails on SPA pages.
+  const liveSnapshot = snapshotFromLiveReads(nextProvider, session, now);
+  if (liveSnapshot) await updateFromSnapshot(nextProvider.id, liveSnapshot);
+  else {
+    const state = await getRuntimeState(provider.id);
+    await setRuntimeState({ ...state, status: 'never_seen', confidence: 'taught', errorLabel: null, consecutiveFailures: 0 });
+  }
+  try { await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW' }); } catch { /* live snapshot already stored when available */ }
   return true;
 }
 
@@ -241,6 +446,8 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
       const tab = await chrome.tabs.create({ url: provider.url, active: true });
       return { opened: tab.id != null, tabId: tab.id };
     }
+    case 'OPEN_OPTIONS':
+      return openOptionsPageReliable();
     case 'REQUEST_PERMISSION':
       return requestPermission(message.providerId);
     case 'SYNC_PERMISSION':
@@ -264,11 +471,28 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
     case 'START_PICKER':
       return startPicker(message.providerId, message.metricId, sender, message.pickerMode);
     case 'SAVE_METRIC': {
-      const staged = stagedSession(message, sender);
+      let staged = stagedSession(message, sender);
+      // Recover a teach session if the tab still has the picker but pendingPicker was lost (SPA reloads, race on tabs.create).
+      if (!staged && sender?.tab?.id != null) {
+        const recovered: TeachSession = { providerId: message.providerId, returnTabId: undefined, pickerMode: 'metrics', metrics: [], liveReads: {} };
+        teachSessions.set(sender.tab.id, recovered);
+        staged = { tabId: sender.tab.id, session: recovered };
+      }
       if (!staged) return { saved: false, metrics: [] };
       const index = staged.session.metrics.findIndex((metric) => metric.metricId === message.metric.metricId);
       if (index >= 0) staged.session.metrics[index] = message.metric;
       else staged.session.metrics.push(message.metric);
+      if (message.liveRead && message.liveRead.value != null) {
+        staged.session.liveReads[message.metric.metricId] = {
+          value: message.liveRead.value,
+          used: message.liveRead.used,
+          remaining: message.liveRead.remaining,
+          total: message.liveRead.total,
+          unit: message.liveRead.unit,
+          evidence: message.liveRead.evidence,
+          semanticSignals: message.liveRead.semanticSignals,
+        };
+      }
       return { saved: true, metrics: staged.session.metrics };
     }
     case 'SAVE_RESET_ANCHOR': {
@@ -307,6 +531,7 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
       const staged = stagedSession(message, sender);
       if (staged) {
         staged.session.metrics = staged.session.metrics.filter((metric) => metric.metricId !== message.metricId);
+        delete staged.session.liveReads[message.metricId];
         teachSessions.set(staged.tabId, staged.session);
         return { removed: true, metrics: staged.session.metrics };
       }
@@ -357,25 +582,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete' || !tab.url) return;
-  const currentUrl = tab.url;
-  void (async () => {
-    const providers = (await getDashboard()).providers;
-    for (const provider of providers) {
-      if (!sameOriginAndPath(provider.url, currentUrl)) continue;
-      await injectCapture(tabId, provider);
-      const pendingPicker = pendingPickers.get(tabId);
-      if (pendingPicker?.providerId === provider.id) {
-        pendingPickers.delete(tabId);
-        teachSessions.set(tabId, { providerId: provider.id, returnTabId: pendingPicker.returnTabId, metricId: pendingPicker.metricId, pickerMode: pendingPicker.pickerMode, metrics: [] });
-        try {
-          await chrome.tabs.sendMessage(tabId, { type: 'START_PICKER', providerId: provider.id, metricId: pendingPicker.metricId, pickerMode: pendingPicker.pickerMode });
-        } catch {
-          teachSessions.delete(tabId);
-        }
-      }
-      if (pendingRefreshes.get(provider.id) === tabId) pendingRefreshes.delete(provider.id);
-    }
-  })();
+  void handleProviderTabReady(tabId, tab.url);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

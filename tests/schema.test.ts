@@ -23,6 +23,18 @@ describe('provider schema', () => {
     expect(safeParseProvider(provider())).toMatchObject({ id: 'sample:test', order: 0 });
   });
 
+  it('accepts an optional user-uploaded icon data URL', () => {
+    const withIcon = {
+      ...provider(),
+      iconDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    };
+    expect(safeParseProvider(withIcon)?.iconDataUrl).toMatch(/^data:image\/png;base64,/);
+  });
+
+  it('rejects non-image data URLs for icons', () => {
+    expect(safeParseProvider({ ...provider(), iconDataUrl: 'data:text/plain;base64,YQ==' })).toBeNull();
+  });
+
   it('keeps the runtime status separate from page-only source', () => {
     expect(makeRuntimeState('sample:test', 'needs_permission').status).toBe('needs_permission');
   });

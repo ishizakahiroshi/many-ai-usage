@@ -16,6 +16,14 @@ describe('teach-mode pure functions', () => {
     expect(anchor.textFingerprint).toMatch(/^[0-9a-f]{8}$/);
   });
 
+  it('refines a broad flex row click down to the node that owns the percentage', async () => {
+    const { refineValueElement } = await import('../src/content/teach/picker');
+    document.body.innerHTML = '<div class="flex row"><span class="label">5h</span><strong class="value">42% remaining</strong></div>';
+    const refined = refineValueElement(document.querySelector('.flex')!);
+    expect(refined.className).toBe('value');
+    expect(extractValue(refined).value).toBe(42);
+  });
+
   it('prefers the shortest unique class selector', () => {
     document.body.innerHTML = '<main><p class="common unique redundant">72%</p><p class="common">18%</p></main>';
     const anchor = createAnchorFingerprint(document.querySelector('.unique')!);
@@ -93,10 +101,10 @@ describe('teach-mode pure functions', () => {
     });
     (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
     startPicker('fixture:continuous');
-    document.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 10, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 10, clientY: 10 }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     pointed = document.querySelector('#credits')!;
-    document.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 20, clientY: 20 }));
+    window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 20, clientY: 20 }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     const host = document.querySelector<HTMLElement>('[data-many-ai-usage-picker]')!;
     expect(host.shadowRoot?.querySelector('[data-count]')?.textContent).toBe('Saved: 2');
@@ -112,9 +120,104 @@ describe('teach-mode pure functions', () => {
     const sendMessage = vi.fn(async () => ({ cancelled: true }));
     (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
     startPicker('fixture:cancel');
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sendMessage).toHaveBeenCalledWith({ type: 'CANCEL_TEACH', providerId: 'fixture:cancel' });
     expect(isPickerActive()).toBe(false);
+  });
+
+  it('keeps a staged metric when background returns an empty metrics list', async () => {
+    document.body.innerHTML = '<p id="weekly">62% remaining</p>';
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.querySelector('#weekly') });
+    const sendMessage = vi.fn(async () => ({ saved: false, metrics: [] as ProviderConfig['metrics'] }));
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
+    startPicker('fixture:empty-response');
+    window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 10, clientY: 10 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const host = document.querySelector<HTMLElement>('[data-many-ai-usage-picker]')!;
+    expect(host.shadowRoot?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+    expect(host.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="done"]')?.disabled).toBe(false);
+  });
+
+  it('renames a staged metric from the panel without window.prompt', async () => {
+    document.body.innerHTML = '<p id="weekly">62% remaining</p>';
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.querySelector('#weekly') });
+    const sendMessage = vi.fn(async (message: { type: string; label?: string; metric?: ProviderConfig['metrics'][number] }) => {
+      if (message.type === 'SAVE_METRIC' && message.metric) return { saved: true, metrics: [message.metric] };
+      if (message.type === 'RENAME_METRIC') return { metrics: [{ ...(message as any), label: message.label, windowLabel: message.label, metricId: 'weekly', kind: 'percent', unit: 'percent', enabled: true }] };
+      return {};
+    });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
+    startPicker('fixture:rename');
+    window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 10, clientY: 10 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const host = document.querySelector<HTMLElement>('[data-many-ai-usage-picker]')!;
+    host.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="rename"]')?.click();
+    const input = host.shadowRoot?.querySelector<HTMLInputElement>('input[data-rename-input]');
+    expect(input).toBeTruthy();
+    if (input) input.value = 'Session limit';
+    host.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="rename-save"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'RENAME_METRIC', label: 'Session limit' }));
+  });
+
+  it('still stages a metric when a page capture-phase handler stops the event', async () => {
+    document.body.innerHTML = '<p id="weekly">62% remaining</p>';
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.querySelector('#weekly') });
+    const staged: ProviderConfig['metrics'] = [];
+    const sendMessage = vi.fn(async (message: { type: string; metric?: ProviderConfig['metrics'][number] }) => {
+      if (message.type === 'SAVE_METRIC' && message.metric) staged.push(message.metric);
+      return { saved: true, metrics: [...staged] };
+    });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
+    const pageHandler = (event: Event) => {
+      event.stopImmediatePropagation();
+    };
+    document.addEventListener('click', pageHandler, true);
+    try {
+      startPicker('fixture:page-capture');
+      window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 10, clientY: 10 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const host = document.querySelector<HTMLElement>('[data-many-ai-usage-picker]')!;
+      expect(host.shadowRoot?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+    } finally {
+      document.removeEventListener('click', pageHandler, true);
+    }
+  });
+
+  it('stages from pointerdown when the page never emits click (Codex/ChatGPT style)', async () => {
+    document.body.innerHTML = '<p id="weekly">85% remaining</p>';
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.querySelector('#weekly') });
+    const staged: ProviderConfig['metrics'] = [];
+    const sendMessage = vi.fn(async (message: { type: string; metric?: ProviderConfig['metrics'][number] }) => {
+      if (message.type === 'SAVE_METRIC' && message.metric) staged.push(message.metric);
+      return { saved: true, metrics: [...staged] };
+    });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
+    // Swallow click entirely — only pointerdown reaches the page (common SPA pattern).
+    document.addEventListener('click', (event) => event.stopImmediatePropagation(), true);
+    startPicker('fixture:pointerdown');
+    // jsdom lacks PointerEvent; MouseEvent with type pointerdown is enough for our handler.
+    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 12, clientY: 14, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const host = document.querySelector<HTMLElement>('[data-many-ai-usage-picker]')!;
+    expect(host.shadowRoot?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'SAVE_METRIC' }));
+    // Trailing click must not double-stage the same gesture.
+    window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 12, clientY: 14 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(staged).toHaveLength(1);
+  });
+
+  it('shows a status hint when the hit element has no usage number', async () => {
+    document.body.innerHTML = '<p id="label">週間利用上限</p>';
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.querySelector('#label') });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage: vi.fn() } };
+    startPicker('fixture:no-value');
+    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 5, clientY: 5, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const host = document.querySelector<HTMLElement>('[data-many-ai-usage-picker]')!;
+    expect(host.shadowRoot?.querySelector('[data-count]')?.textContent).toBe('Saved: 0');
+    expect(host.shadowRoot?.querySelector('[data-hint]')?.textContent).toMatch(/No usage number/i);
   });
 });

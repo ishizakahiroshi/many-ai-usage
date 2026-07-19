@@ -23,7 +23,28 @@ function lowestMetric(metrics: NormalizedMetric[]): string | null {
 }
 
 function openOptions() {
-  void chrome.runtime.openOptionsPage();
+  const url = chrome.runtime.getURL('options.html');
+  // Background re-navigates zombie options tabs after extension reload.
+  // If the SW does not answer (sleep/hang), open from the popup as a fallback.
+  let settled = false;
+  const fallback = window.setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    void chrome.tabs.create({ url, active: true });
+  }, 700);
+  void sendMessage<{ opened?: boolean }>({ type: 'OPEN_OPTIONS' })
+    .then((result) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(fallback);
+      if (!result?.opened) void chrome.tabs.create({ url, active: true });
+    })
+    .catch(() => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(fallback);
+      void chrome.tabs.create({ url, active: true });
+    });
 }
 
 function openSampleOptions() {
@@ -43,10 +64,6 @@ async function allowAccess(provider: ProviderConfig, reload: () => void): Promis
   try { granted = await chrome.permissions.request({ origins: [originPattern(provider.url)] }); } catch { granted = false; }
   await sendMessage({ type: 'SYNC_PERMISSION', providerId: provider.id, granted });
   reload();
-}
-
-function faviconUrl(provider: ProviderConfig): string | null {
-  try { return `${new URL(provider.url).origin}/favicon.ico`; } catch { return null; }
 }
 
 function MiniMetric({ metric, lowest }: { metric: NormalizedMetric; lowest: boolean }) {
@@ -71,7 +88,12 @@ function ProviderRow({ provider, snapshot, state, reload }: { provider: Provider
   return (
     <article class={`provider-row ${expanded ? 'expanded' : ''}`}>
       <div class="row-main">
-        <div class="provider-name" title={provider.url}>{provider.displayName}</div>
+        <div class="provider-name" title={provider.url}>
+          {provider.iconDataUrl
+            ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" />
+            : null}
+          <span class="provider-name-text">{provider.displayName}</span>
+        </div>
         <div class="windows" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(3, metrics.length))}, minmax(0, 1fr))` }}>
           {metrics.length > 0 ? metrics.map((metric) => <MiniMetric key={metric.id} metric={metric} lowest={metric.id === lowest} />) : <span class="empty-value">No usage captured</span>}
         </div>
@@ -97,10 +119,13 @@ function IssueCard({ provider, snapshot, state, reload }: { provider: ProviderCo
   const tile = snapshot?.source === 'page_only';
   const needsTeaching = state.status === 'needs_teaching';
   const title = state.status === 'needs_permission' ? 'Permission needed' : needsTeaching ? 'Re-teach needed' : tile ? 'Page tile' : state.status === 'never_seen' ? 'Ready to capture' : statusLabel(state);
-  const favicon = tile && state.status === 'ok' ? faviconUrl(provider) : null;
   return (
     <article class="issue-card">
-      <div class="issue-heading">{favicon ? <img class="tile-favicon" src={favicon} alt="" aria-hidden="true" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : null}<strong>{provider.displayName}</strong><span class="status-badge">{title}</span></div>
+      <div class="issue-heading">
+        {provider.iconDataUrl ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" /> : null}
+        <strong>{provider.displayName}</strong>
+        <span class="status-badge">{title}</span>
+      </div>
       <p>{state.status === 'needs_permission' ? 'Allow access to this usage page so the dashboard can read its visible data locally.' : needsTeaching ? 'The taught value was not found three times. Track the value again on the usage page.' : tile ? 'No confident usage metric was found. Keep this page as a link tile, or try parsing again.' : state.errorLabel ?? 'Open the page once to capture a local snapshot.'}</p>
       <div class="issue-actions">
         {state.status === 'needs_permission' && <button onClick={() => void allowAccess(provider, reload)}>Allow access</button>}
@@ -136,7 +161,11 @@ function PopupApp() {
   return (
     <div class="popup-shell">
       <header class="popup-header">
-        <div><strong>many-ai-usage</strong><span>v0.1.0</span></div>
+        <div class="brand">
+          <img class="app-icon" src={chrome.runtime.getURL('assets/icons/icon-192.png')} width={22} height={22} alt="" />
+          <strong>many-ai-usage</strong>
+          <span>v0.1.0</span>
+        </div>
         <button class="text-button" onClick={openOptions}>⚙ options</button>
       </header>
       <section class="provider-list" aria-label="Usage providers">
