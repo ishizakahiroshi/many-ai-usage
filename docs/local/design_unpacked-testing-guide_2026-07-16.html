@@ -1,18 +1,18 @@
 <!DOCTYPE html>
 <!--docsweep-meta
 type: design
-status: planned
-tags: [testing-guide, unpacked, many-ai-usage, v0.1.0]
+status: watching
+tags: [testing-guide, unpacked, many-ai-usage, v0.1.0, firefox]
 owner: ishizakahiroshi
-related: [plan_try-samples-onboarding.md, plan_teach-multi-metric-continuous.md, review_teach-mode-ux_2026-07-16.html]
-last_reviewed: 2026-07-16
+related: [plan_try-samples-onboarding.md, plan_teach-multi-metric-continuous.md, review_teach-mode-ux_2026-07-16.html, recap_2026-07-19_firefox-unpacked-dogfood.md, plan_starter-pack-import.md]
+last_reviewed: 2026-07-19
 docsweep_policy: archive_with_release
 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>many-ai-usage v0.1.0 unpacked 実機テストガイド — 2026-07-16</title>
+<title>many-ai-usage v0.1.0 unpacked 実機テストガイド — 2026-07-19</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
@@ -82,27 +82,29 @@ docsweep_policy: archive_with_release
   <div class="header-row">
     <span class="system-badge"><span class="dot"></span>対象: <b>many-ai-usage v0.1.0</b>（Chrome / Firefox 拡張）</span>
     <span class="tag tag-accent">unpacked テスト</span>
-    <span class="meta">2026-07-16 (木) 作成</span>
+    <span class="meta">2026-07-16 作成 · 2026-07-19 dogfood 反映</span>
   </div>
   <h1>v0.1.0 unpacked 実機テストガイド</h1>
 
   <div class="tldr">
     <b>3 分でわかる TL;DR</b><br>
-    ローカルビルドした <code>dist/chrome</code> と <code>dist/firefox</code> を各ブラウザに「開発者モードで」読み込む。テストは 5 シナリオ（空状態 / Try samples / 冪等性 / teach-mode / 使い方ページ遷移）。teach-mode は専用の新規タブと Continuous mode を使い、複数 metric とキャンセル時の全破棄まで確認する。
+    ローカルビルドした <code>dist/chrome</code> と <code>dist/firefox</code> を各ブラウザに「開発者モードで」読み込む。テストは 5 シナリオ（空状態 / スターター取込 / 冪等性 / teach-mode / 使い方ページ遷移）。teach-mode は専用の新規タブと Continuous mode を使い、複数 metric とキャンセル時の全破棄まで確認する。<br>
+    <b>2026-07-19 追記:</b> スターターは <code>resources/starter.json</code>（GitHub raw）。未 push だと 404 → ローカル JSON 貼り付けで代替。Claude の登録 URL は <code>https://claude.ai/new#settings/usage</code>。
   </div>
 
   <h2>1. 前提の確認</h2>
   <div class="card">
-    <p>テストに入る前に以下 3 点を確認する。すべて既に済んでいるはずだが、環境が変わっているときは念のため。</p>
+    <p>テストに入る前に以下を確認する。環境が変わっているときは念のため。</p>
     <table>
       <thead><tr><th style="width:15em">確認事項</th><th>確認方法</th><th style="width:6em">状態</th></tr></thead>
       <tbody>
-        <tr><td><b>ビルド成果物の存在</b></td><td><code>C:\dev\github\public\many-ai-usage\dist\chrome</code> と <code>dist\firefox</code> に <code>manifest.json</code> があること。無ければ <code>pnpm run build:chrome</code> / <code>pnpm run build:firefox</code> を実行</td><td><span class="tag tag-ok">✓</span></td></tr>
-        <tr><td><b>typecheck / test</b></td><td><code>pnpm run typecheck</code> と <code>pnpm test</code> が緑（24 tests / 6 test files）</td><td><span class="tag tag-ok">✓</span></td></tr>
-        <tr><td><b>Registry の公開</b></td><td><code>curl -I https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json</code> が <code>HTTP/2 200</code></td><td><span class="tag tag-ok">✓</span></td></tr>
+        <tr><td><b>ビルド成果物の存在</b></td><td><code>C:\dev\github\public\many-ai-usage\dist\chrome</code> と <code>dist\firefox</code> に <code>manifest.json</code> があること。無ければ <code>pnpm run build:chrome</code> / <code>pnpm run build:firefox</code> を実行。ソースを直したら必ず再 build → 拡張の再読み込み</td><td><span class="tag">☐</span></td></tr>
+        <tr><td><b>typecheck / test</b></td><td><code>pnpm run typecheck</code> と <code>pnpm test</code> が緑</td><td><span class="tag">☐</span></td></tr>
+        <tr><td><b>スターター JSON（remote）</b></td><td><code>https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/starter.json</code> が 200 か。404 なら <code>resources/</code> が main に未 push → 下の「貼り付け import」で代替</td><td><span class="tag">☐</span></td></tr>
+        <tr><td><b>スターター JSON（ローカル）</b></td><td><code>resources/starter.json</code> が存在する（貼り付け用）。Claude の <code>url</code> が <code>https://claude.ai/new#settings/usage</code> であること</td><td><span class="tag">☐</span></td></tr>
       </tbody>
     </table>
-    <p class="meta">全て ✓ になっていれば、拡張は Try samples の Remote Registry fetch を含めて完全に動く状態。</p>
+    <p class="meta">remote が 200 なら「スターターを取り込む ▸」だけで T2 が通る。404 でも貼り付け import で dogfood は続行できる。</p>
   </div>
 
   <h2>2. Chrome への unpacked インストール</h2>
@@ -120,12 +122,30 @@ docsweep_policy: archive_with_release
   <h2>3. Firefox への unpacked インストール</h2>
   <div class="card">
     <ol class="steps">
-      <li>アドレスバーに <code>about:debugging#/runtime/this-firefox</code> と入れて開く</li>
+      <li>アドレスバーに <code>about:debugging#/runtime/this-firefox</code> と入れて開く（通常版・Developer Edition どちらでも可）</li>
       <li>「<b>一時的なアドオンを読み込む…</b>」ボタンを押す</li>
       <li>ファイル選択ダイアログで <code>C:\dev\github\public\many-ai-usage\dist\firefox\manifest.json</code> を<b>選ぶ</b>（フォルダではなくファイルを選ぶ）<div class="hint"><b>Chrome との違い:</b> Firefox は <code>manifest.json</code> ファイルそのものを指定する。</div></li>
-      <li>拡張カードが出て「many-ai-usage 0.1.0」が表示される</li>
+      <li>拡張カードが出て「many-ai-usage 0.1.0」が表示され、バックグラウンドが「実行中」なら成功</li>
+      <li>再 build 後はこの画面の「<b>再読み込み</b>」を押す（または削除して再読込）</li>
+      <li>ツールバーにアイコンが無ければ パズル（拡張）メニュー → many-ai-usage をピン留め</li>
     </ol>
     <div class="ng"><b>注意:</b> Firefox の「一時的なアドオン」は<b>ブラウザを閉じると消える</b>。テストごとに再読込が要る。恒常的に使うなら AMO 提出後の署名付きパッケージを待つこと。</div>
+    <div class="hint"><b>プライベートウィンドウ:</b> <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">P</span>。拡張の有無切り分けに使えるが、ログイン Cookie は通常ウィンドウと共有されない。teach 本番はログイン済みの通常ウィンドウ推奨。</div>
+    <div class="hint"><b>「Firefox 非対応？」と疑う前に:</b> 各 AI サイト自体がその Firefox でログイン・usage 表示できるか先に確認する。拡張は登録 URL を 1 回開くだけで、サイトのログイン壁・upgrade リダイレクトはサイト仕様。</div>
+  </div>
+
+  <h2>3.5 サービス別・登録 URL（dogfood 2026-07-19）</h2>
+  <div class="card">
+    <p>スターター取込後・手動登録時の <b>開く URL</b>。ここがズレると teach 以前に usage 数字が出ない。</p>
+    <table>
+      <thead><tr><th>サービス</th><th>推奨登録 URL</th><th>メモ</th></tr></thead>
+      <tbody>
+        <tr><td><b>Claude</b></td><td><code>https://claude.ai/new#settings/usage</code></td><td><code>/settings/usage</code> は upgrade 等に寄りやすい。hash SPA のこちらを使う（starter.json も同値に修正済み）</td></tr>
+        <tr><td><b>Codex CLI</b></td><td><code>https://chatgpt.com/codex/cloud/settings/analytics#usage</code></td><td>ChatGPT ログイン必須</td></tr>
+        <tr><td><b>Grok</b></td><td><code>https://grok.com/?_s=usage</code></td><td>未ログインだと薄いアカウント UI になる（拡張のループではない）</td></tr>
+      </tbody>
+    </table>
+    <p class="meta">teach 前に「画面に % や数値が目で見える」ことを確認してから Track する。</p>
   </div>
 
   <h2>4. テストシナリオ 5 種</h2>
@@ -133,57 +153,58 @@ docsweep_policy: archive_with_release
 
   <div class="scenario">
     <h3><span class="id">T1</span>空状態フロー</h3>
-    <div class="goal"><b>ねらい</b>: 初回起動時に「Try samples」ボタンが正しく出るか</div>
+    <div class="goal"><b>ねらい</b>: 初回起動時にスターター導線（Try samples / スターター取込）が出るか</div>
     <ol class="steps">
       <li>拡張アイコンをクリックして popup を開く</li>
-      <li>popup 全体を確認</li>
+      <li>popup 全体を確認。設定（options）も開けること</li>
     </ol>
-    <div class="hint"><b>providers が既に登録済みなら</b>: 別セッションのテストで残っている可能性。<code>chrome://extensions/</code> → many-ai-usage カードの「詳細」→ 一番下の「<b>拡張機能のデータを消去</b>」を押してから拡張アイコンを再クリック</div>
+    <div class="hint"><b>providers が既に登録済みなら</b>: Chrome は <code>chrome://extensions/</code> → many-ai-usage「詳細」→「<b>拡張機能のデータを消去</b>」。Firefox は一時アドオンを削除して再読込するか、storage を空にする。空状態で T1 をやり直す。</div>
     <div class="expected"><b>成功基準:</b>
       <ul class="checklist">
         <li>ヘッダ「many-ai-usage v0.1.0」</li>
-        <li>大きな文字で「<b>No providers yet</b>」</li>
-        <li>その下に「Try six URL-only samples, or add your own usage page.」</li>
-        <li>2 つのボタン: <b>「Try samples ▸」</b> と <b>「使い方を見る →」</b></li>
+        <li>空メッセージ（スターター取込 or 自分の usage 追加を促す文言）</li>
+        <li>スターター／Try samples 系ボタンと「使い方を見る」系リンクが見える</li>
+        <li>⚙ 設定で options タブが開く</li>
       </ul>
     </div>
   </div>
 
   <div class="scenario">
-    <h3><span class="id">T2</span>Try samples フロー（Remote Registry fetch）</h3>
-    <div class="goal"><b>ねらい</b>: 明示同意 → GitHub raw から 6 サービス取得 → storage に反映</div>
+    <h3><span class="id">T2</span>スターター取込（Remote または貼り付け）</h3>
+    <div class="goal"><b>ねらい</b>: 明示同意 → starter.json から最大 6 サービス → storage に反映。remote 404 時はローカル貼り付けで同等結果</div>
+    <h3 style="margin-top:8px;font-size:1rem">経路 A: remote（main に resources があるとき）</h3>
     <ol class="steps">
-      <li>popup の「<b>Try samples ▸</b>」を押す</li>
-      <li>options タブが新規に開く（<code>options.html?trySamples=1</code>）</li>
-      <li>options 画面中央に確認ダイアログが出る</li>
-      <li>ダイアログの内容を確認: fetch URL が <code>https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json</code> であること + 「取得するのは表示名と URL パターンだけ」の説明</li>
-      <li>「<b>取得する</b>」ボタンを押す</li>
-      <li>数秒待つ（ネットワーク遅延次第）</li>
+      <li>options を開く（popup の ⚙ または「スターター／Try samples」）</li>
+      <li>左サイド「<b>スターターを取り込む ▸</b>」（英語 UI なら相当ボタン）を押す</li>
+      <li>確認ダイアログの URL が <code>https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/starter.json</code> であること</li>
+      <li>取込を実行し、数秒待つ</li>
+    </ol>
+    <h3 style="margin-top:8px;font-size:1rem">経路 B: 貼り付け（remote が 404 のとき）</h3>
+    <ol class="steps">
+      <li>PowerShell: <code>Get-Content -Raw C:\dev\github\public\many-ai-usage\resources\starter.json | Set-Clipboard</code></li>
+      <li>options の「JSON を貼り付けてインポート」を開き、貼り付け → インポート</li>
     </ol>
     <div class="expected"><b>成功基準:</b>
       <ul class="checklist">
-        <li>ダイアログが閉じる</li>
-        <li>options の左サイドバーに 6 タイル: <b>Claude / Codex CLI / Grok / GitHub Copilot / Cursor / Ollama</b></li>
-        <li>各タイルは「Needs access」or「Not captured」表示（selector 未教示状態）</li>
-        <li>トースト:「Added 6 sample providers. Open each usage page and teach the visible value.」</li>
+        <li>左サイドに 6 タイル相当: <b>Claude / Codex CLI / Grok / GitHub Copilot / Cursor / Ollama</b></li>
+        <li>Claude の URL が <code>https://claude.ai/new#settings/usage</code>（options で確認）</li>
+        <li>未 teach のサービスはタイル／要対応扱い（正常）</li>
       </ul>
     </div>
-    <div class="ng"><b>失敗パターン:</b> ダイアログにエラー「Sample registry request failed (404)」→ providers.json が main に merge されていない。<code>gh pr list --repo ishizakahiroshi/many-ai-cli --state merged</code> で確認</div>
+    <div class="ng"><b>失敗パターン:</b> 「Starter pack request failed (404)」→ <code>resources/</code> が GitHub main に無い。経路 B で続行するか、commit+push 後に経路 A を再試行。</div>
   </div>
 
   <div class="scenario">
-    <h3><span class="id">T3</span>Try samples の冪等性</h3>
-    <div class="goal"><b>ねらい</b>: 2 回目の Try samples でも既存 provider を上書きせず、重複追加もしないこと</div>
+    <h3><span class="id">T3</span>スターター取込の冪等性</h3>
+    <div class="goal"><b>ねらい</b>: 2 回目の取込で既存 provider を壊さず、不要な重複を増やさないこと</div>
     <ol class="steps">
-      <li>T2 が完了した状態のまま、options の左サイドバー最上部にある「<b>Need a starting point?</b>」ブロックに注目<div class="hint">Try samples の 6 個が既に登録されているので、通常この onboarding ブロックは<b>非表示になっているはず</b></div></li>
-      <li>もし onboarding ブロックが消えていることを確認したら、<b>URL 直打ち</b>で <code>chrome-extension://&lt;id&gt;/options.html?trySamples=1</code> を開いて強制的にダイアログを出す<div class="hint"><code>&lt;id&gt;</code> は <code>chrome://extensions/</code> の many-ai-usage カードで確認できる</div></li>
-      <li>「取得する」を押す</li>
+      <li>T2 完了後、再度「スターターを取り込む」または <code>options.html?importStarter=1</code> / <code>?trySamples=1</code> でダイアログを出す</li>
+      <li>取込を実行する</li>
     </ol>
     <div class="expected"><b>成功基準:</b>
       <ul class="checklist">
-        <li>タイル数が 6 のまま増えない</li>
-        <li>トースト:「Sample providers are already registered. Existing settings were not changed.」</li>
-        <li>既存タイルの teach 済み設定（もしあれば）が保たれている</li>
+        <li>タイル数がむやみに倍増しない（既登録メッセージ or 上書き確認の仕様どおり）</li>
+        <li>既に teach 済みの selector / 表示が消えない</li>
       </ul>
     </div>
   </div>
@@ -213,6 +234,8 @@ docsweep_policy: archive_with_release
       </ul>
     </div>
     <div class="hint"><b>キャンセル確認:</b> もう一度 Track this element を開始して 1 metric を選び、Esc を押す。options に戻った後、Tracked elements が増えていなければ全破棄も成功。</div>
+    <div class="hint"><b>Claude で試す場合:</b> 登録 URL を <code>https://claude.ai/new#settings/usage</code> にし、ログイン済みで % が見えてから Track。セッション／週間など複数 metric を Continuous で teach できる。</div>
+    <div class="hint"><b>Grok でマーカーがおかしいとき:</b> 枠がサイドバーまで伸びる・ツールチップが変な数値（例: 4.5）→ usage タブで <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">R</span>（スーパーリロード）してから Track し直す。SPA + content script の半端状態で起きやすい。</div>
   </div>
 
   <div class="scenario">
@@ -236,18 +259,32 @@ docsweep_policy: archive_with_release
     <table>
       <thead><tr><th style="width:5em">ID</th><th>シナリオ</th><th style="width:8em">判定</th></tr></thead>
       <tbody>
-        <tr><td><b>T1</b></td><td>空状態で「Try samples ▸」ボタンが出る</td><td><span class="tag">☐ 未実施</span></td></tr>
-        <tr><td><b>T2</b></td><td>Try samples で 6 サービスが登録される</td><td><span class="tag">☐ 未実施</span></td></tr>
-        <tr><td><b>T3</b></td><td>2 回目 Try samples は冪等（重複しない）</td><td><span class="tag">☐ 未実施</span></td></tr>
-        <tr><td><b>T4</b></td><td>新規タブの Continuous mode で 2 metric 保存できる</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T1</b></td><td>空状態でスターター導線が出る</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T2</b></td><td>スターターで最大 6 サービスが登録される（remote または貼り付け）</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T3</b></td><td>2 回目取込が冪等（設定を壊さない）</td><td><span class="tag">☐ 未実施</span></td></tr>
+        <tr><td><b>T4</b></td><td>Continuous mode で 2 metric 以上 teach → popup 表示</td><td><span class="tag">☐ 未実施</span></td></tr>
         <tr><td><b>T5</b></td><td>使い方ページが 200 で開ける</td><td><span class="tag">☐ 未実施</span></td></tr>
       </tbody>
     </table>
     <p class="meta">Chrome と Firefox の両方で 5 シナリオ通ればストア提出フェーズに進める。1 つでも赤なら原因調査（下の 6. 参照）。</p>
+    <p class="meta"><b>2026-07-19 dogfood（Firefox）:</b> Claude / Codex / Grok の teach→popup までは確認。T1〜T5 の形式チェックリストとしての全緑は別途。Firefox 対象外にする根拠は無し。</p>
   </div>
 
   <h2>6. 不具合が出た時のトラブルシュート</h2>
   <div class="card">
+    <h3>よくある症状（2026-07-19 dogfood）</h3>
+    <table>
+      <thead><tr><th>症状</th><th>まず疑うこと</th><th>対処</th></tr></thead>
+      <tbody>
+        <tr><td>Starter pack request failed (404)</td><td><code>resources/starter.json</code> が GitHub main に無い</td><td>貼り付け import、または resources を commit+push</td></tr>
+        <tr><td>Claude が upgrade / 真っ黒 / 使い物にならない</td><td>登録 URL が <code>/settings/usage</code></td><td>options で <code>https://claude.ai/new#settings/usage</code> に変更。ログイン済みか確認</td></tr>
+        <tr><td>Grok が薄いアカウント UI だけ</td><td>未ログイン</td><td>サインイン後に <code>?_s=usage</code> を開き直す（拡張の無限リダイレクトではない）</td></tr>
+        <tr><td>teach マーカーがサイドバーまで伸びる・変な数値</td><td>Grok SPA の半端な DOM / inject 状態</td><td>usage タブをスーパーリロード（<span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">R</span>）して再 Track</td></tr>
+        <tr><td>Firefox で拡張が消えた</td><td>一時アドオンの仕様</td><td><code>manifest.json</code> を再度読み込む</td></tr>
+        <tr><td>ソースを直したのに挙動が古い</td><td>dist 未 build / 拡張未リロード</td><td><code>pnpm run build:firefox</code>（or chrome）→ 再読み込み</td></tr>
+      </tbody>
+    </table>
+
     <h3>拡張の Service Worker のログを見る（Chrome）</h3>
     <ol class="steps">
       <li><code>chrome://extensions/</code> を開く</li>
@@ -289,13 +326,16 @@ Console のエラー（あれば）:
   <h2>関連ドキュメント</h2>
   <div class="card">
     <ul>
-      <li><code>docs/local/plan_try-samples-onboarding.md</code> — v0.1.0 Try samples 実装の plan（進行中）</li>
-      <li><code>docs/local/plan_teach-multi-metric-continuous.md</code> — v0.1.1 teach-mode UX 改修の plan（次期実装）</li>
-      <li><code>docs/local/review_teach-mode-ux_2026-07-16.html</code> — 判断シート（Continuous mode 採用等の決定）</li>
-      <li><code>articles/many-ai-usage/usage.html</code>（github.io 上）— エンドユーザー向け使い方ページ</li>
-      <li><code>docs/store/submission-notes-v0.1.0.ja.md</code> — ストア審査担当者向け notes</li>
+      <li><code>docs/local/recap_2026-07-19_firefox-unpacked-dogfood.md</code> — Firefox dogfood の振り返り・引き継ぎ（本更新の元）</li>
+      <li><code>docs/local/plan_starter-pack-import.md</code> — スターター pack 取込</li>
+      <li><code>docs/local/plan_try-samples-onboarding.md</code> — Try samples / オンボーディング</li>
+      <li><code>docs/local/plan_teach-multi-metric-continuous.md</code> — Continuous teach</li>
+      <li><code>docs/local/review_teach-mode-ux_2026-07-16.html</code> — 判断シート</li>
+      <li><code>resources/starter.json</code> — コミュニティスターター（Claude URL 含む）</li>
+      <li><code>https://ishizakahiroshi.com/articles/many-ai-usage/usage.html</code> — エンドユーザー向け使い方</li>
+      <li><code>docs/store/submission-notes-v0.1.0.ja.md</code> — ストア審査 notes</li>
     </ul>
-    <p class="meta">最終更新: 2026-07-16 (木) · 対象: many-ai-usage v0.1.0 · 環境: Windows 11 + Chrome / Firefox</p>
+    <p class="meta">最終更新: 2026-07-19 · 対象: many-ai-usage v0.1.0 · 環境: Windows 11 + Chrome / Firefox（通常版・Dev Edition）</p>
   </div>
 
 </div>

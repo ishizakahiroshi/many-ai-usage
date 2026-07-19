@@ -143,7 +143,8 @@ export const providerConfigSchema = v.object({
   metrics: v.array(taughtMetricSchema),
   iconDataUrl: v.optional(v.pipe(
     v.string(),
-    v.regex(/^data:image\/(png|jpeg|jpg|webp|gif);base64,/i),
+    // svg+xml allowed for sample letter badges imported once from GitHub raw.
+    v.regex(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,/i),
     v.maxLength(ICON_DATA_URL_MAX_LENGTH),
   )),
   createdAt: v.pipe(v.string(), v.isoTimestamp()),
@@ -164,6 +165,33 @@ const providersRegistrySchema = v.object({
   updated: v.string(),
   providers: v.pipe(v.array(providersRegistryItemSchema), v.minLength(1)),
 });
+
+/** Max raw JSON body size for remote/paste starter packs (512 KiB). */
+export const STARTER_PACK_MAX_BYTES = 512 * 1024;
+
+const starterProviderSchema = v.object({
+  id: v.pipe(v.string(), v.minLength(1)),
+  displayName: v.pipe(v.string(), v.minLength(1)),
+  url: v.pipe(v.string(), v.url()),
+  urlMatch: v.pipe(v.array(v.string()), v.minLength(1)),
+  mode: v.optional(v.picklist(providerModes)),
+  refreshIntervalMinutes: v.optional(v.pipe(v.number(), v.minValue(3), v.maxValue(240))),
+  verifiedAt: v.optional(v.string()),
+  note: v.optional(v.string()),
+  /** Sample icon on GitHub raw (not base64). Fetched once on import into iconDataUrl. */
+  iconUrl: v.optional(v.pipe(v.string(), v.url())),
+  metrics: v.optional(v.array(taughtMetricSchema)),
+});
+
+const starterPackSchema = v.object({
+  schema: v.literal('many-ai-usage.starter.v1'),
+  updated: v.string(),
+  note: v.optional(v.string()),
+  source: v.optional(v.string()),
+  providers: v.pipe(v.array(starterProviderSchema), v.minLength(1)),
+});
+
+export type StarterPack = v.InferOutput<typeof starterPackSchema>;
 
 const normalizedMetricSchema = v.object({
   id: v.string(),
@@ -219,12 +247,12 @@ export function safeParseProvider(value: unknown): ProviderConfig | null {
 export function parseProvidersRegistryResponse(raw: unknown, now = new Date().toISOString()): ProviderConfig[] {
   const registry = v.parse(providersRegistrySchema, raw);
   return registry.providers.map((provider, order) => ({
-    schema: 'many-ai-usage.provider.v1',
+    schema: 'many-ai-usage.provider.v1' as const,
     id: provider.id,
     displayName: provider.displayName,
     url: provider.url,
     urlMatch: provider.urlMatch,
-    mode: 'auto',
+    mode: 'auto' as const,
     displayEnabled: true,
     refreshIntervalMinutes: 15,
     metrics: [],
@@ -232,6 +260,53 @@ export function parseProvidersRegistryResponse(raw: unknown, now = new Date().to
     updatedAt: now,
     order,
   }));
+}
+
+export interface ParsedStarterPack {
+  providers: ProviderConfig[];
+  /** Sample icon URLs keyed by provider id (hydrate to iconDataUrl on import only). */
+  sampleIconUrls: Record<string, string>;
+}
+
+/**
+ * Parse a community starter pack (URL + optional taught metrics + sample iconUrl).
+ * Does not execute JSON as code — data only. Maps into storage ProviderConfig shape.
+ * iconUrl is returned separately; callers fetch once and set iconDataUrl.
+ */
+export function parseStarterPackResponse(raw: unknown, now = new Date().toISOString()): ParsedStarterPack {
+  const pack = v.parse(starterPackSchema, raw);
+  const sampleIconUrls: Record<string, string> = {};
+  const providers = pack.providers.map((provider, order) => {
+    if (provider.iconUrl) {
+      // Allowed-host check lives in samples/icon so schema stays free of network policy.
+      sampleIconUrls[provider.id] = provider.iconUrl;
+    }
+    const metrics = provider.metrics ?? [];
+    const mode = provider.mode ?? (metrics.length > 0 ? 'taught' : 'auto');
+    return {
+      schema: 'many-ai-usage.provider.v1' as const,
+      id: provider.id,
+      displayName: provider.displayName,
+      url: provider.url,
+      urlMatch: provider.urlMatch,
+      mode,
+      displayEnabled: true,
+      refreshIntervalMinutes: provider.refreshIntervalMinutes ?? 15,
+      metrics,
+      createdAt: now,
+      updatedAt: now,
+      order,
+    };
+  });
+  return { providers, sampleIconUrls };
+}
+
+/** Reject oversized raw bodies before JSON.parse of paste/fetch text. */
+export function assertStarterPackByteSize(rawText: string, maxBytes = STARTER_PACK_MAX_BYTES): void {
+  const bytes = new TextEncoder().encode(rawText).byteLength;
+  if (bytes > maxBytes) {
+    throw new Error(`Starter pack is too large (${bytes} bytes; max ${maxBytes})`);
+  }
 }
 
 export function safeParseSnapshot(value: unknown): NormalizedSnapshot | null {

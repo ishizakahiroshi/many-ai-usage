@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DashboardResponse } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, statusLabel } from '../shared/format';
 import { fileToIconDataUrl } from '../shared/icon';
-import type { ProviderConfig, ProviderMode } from '../shared/schema';
+import type { ProviderConfig, ProviderMode, TaughtMetric } from '../shared/schema';
 import {
   initI18n,
   listLocales,
@@ -13,8 +13,8 @@ import {
   type TranslateFn,
 } from '../shared/i18n';
 import { buildGitHubIssueUrl, buildReportBody, detectBrowser, githubOpenUserMessage } from '../shared/report';
-import { fetchProvidersRegistry, isSampleProviderId, PROVIDERS_REGISTRY_URL, USAGE_GUIDE_URL } from '../shared/samples';
-import { applyRegistryProviders } from '../shared/storage';
+import { fetchStarterPack, isSampleProviderId, parseStarterPackText, STARTER_PACK_URL, USAGE_GUIDE_URL } from '../shared/samples';
+import { applyStarterProviders } from '../shared/storage';
 import { obsLog, perfLog, perfNow } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
 import { originChanged, originPattern, urlWithoutHash } from '../shared/url';
@@ -49,6 +49,11 @@ function requestedProviderId(): string | null {
   return new URLSearchParams(window.location.search).get('provider');
 }
 
+/** Pretty-print a taught metric for local diagnostics (browser-only; no secrets). */
+function formatTrackJson(metric: TaughtMetric): string {
+  return JSON.stringify(metric, null, 2);
+}
+
 function OptionsApp() {
   // Capture deep-link before strip effect / async reload can clear the query.
   const [bootProviderId] = useState<string | null>(() => requestedProviderId());
@@ -58,15 +63,21 @@ function OptionsApp() {
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [samplesDialogOpen, setSamplesDialogOpen] = useState(() => new URLSearchParams(window.location.search).get('trySamples') === '1');
+  const [samplesDialogOpen, setSamplesDialogOpen] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('importStarter') === '1' || params.get('trySamples') === '1';
+  });
   const [samplesLoading, setSamplesLoading] = useState(false);
   const [samplesError, setSamplesError] = useState('');
+  const [pasteText, setPasteText] = useState('');
+  const [pasteLoading, setPasteLoading] = useState(false);
   const [reportOpen, setReportOpen] = useState(() => new URLSearchParams(window.location.search).get('report') === '1');
   const [reportTitle, setReportTitle] = useState('');
   const [reportDescription, setReportDescription] = useState('');
   const [reportSteps, setReportSteps] = useState('');
   const [reportMessage, setReportMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [reportPreviewOpen, setReportPreviewOpen] = useState(false);
+  const [copiedTrackId, setCopiedTrackId] = useState<string | null>(null);
   const [t, setT] = useState<TranslateFn | null>(null);
   const [locale, setLocale] = useState('en');
   const [catalog, setCatalog] = useState<LocaleCatalog | null>(null);
@@ -118,9 +129,10 @@ function OptionsApp() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
     obsLog('options.boot', {
       hrefPath: window.location.pathname,
-      trySamples: new URLSearchParams(window.location.search).get('trySamples') === '1',
+      importStarter: params.get('importStarter') === '1' || params.get('trySamples') === '1',
       hasProvider: Boolean(bootProviderId),
     });
     applyI18n();
@@ -129,7 +141,7 @@ function OptionsApp() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     // Strip one-shot launch params so reload/bookmark does not keep forcing selection/dialog.
-    if (params.has('trySamples') || params.has('provider') || params.has('report')) {
+    if (params.has('trySamples') || params.has('importStarter') || params.has('provider') || params.has('report')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
@@ -162,7 +174,8 @@ function OptionsApp() {
   const showTrySamples = dashboard ? !dashboard.providers.some((provider) => isSampleProviderId(provider.id)) : false;
 
   const select = (id: string | 'new') => {
-    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    if (!t) return;
+    if (dirty && !window.confirm(t('options.discardConfirm'))) return;
     setSelectedId(id);
     setMessage('');
     if (id === 'new') setDraft(blankDraft(dashboard?.providers.length ?? 0));
@@ -180,13 +193,14 @@ function OptionsApp() {
   };
 
   const save = async () => {
-    if (!draft.displayName.trim()) return setMessage('Add a display name.');
-    if (!validUrl(draft.url)) return setMessage('Enter an http(s) usage page URL.');
+    if (!t) return;
+    if (!draft.displayName.trim()) return setMessage(t('options.msgNeedDisplayName'));
+    if (!validUrl(draft.url)) return setMessage(t('options.msgNeedUrl'));
     const now = new Date().toISOString();
     const existing = selectedProvider;
     let granted = await permissionFor(draft.url);
     if (!granted || (existing && originChanged(existing.url, draft.url))) {
-      setMessage('Requesting access to this host…');
+      setMessage(t('options.msgRequestingAccess'));
       granted = await requestPermission(draft.url);
     }
     const provider: ProviderConfig = {
@@ -208,12 +222,12 @@ function OptionsApp() {
     setSelectedId(provider.id);
     setDraft(draftFrom(provider));
     setDirty(false);
-    setMessage(granted ? 'Saved. Open the usage page to capture its local snapshot.' : 'Saved, but host access is still required.');
+    setMessage(granted ? t('options.msgSavedOk') : t('options.msgSavedNoPerm'));
     reload();
   };
 
   const remove = async () => {
-    if (!selectedProvider || !window.confirm(`Delete ${selectedProvider.displayName}?`)) return;
+    if (!t || !selectedProvider || !window.confirm(t('options.deleteConfirm', { name: selectedProvider.displayName }))) return;
     await sendMessage({ type: 'DELETE_PROVIDER', providerId: selectedProvider.id });
     setSelectedId(null);
     setDirty(false);
@@ -221,22 +235,22 @@ function OptionsApp() {
   };
 
   const allowSelected = async () => {
-    if (!selectedProvider) return;
+    if (!t || !selectedProvider) return;
     const granted = await requestPermission(draft.url || selectedProvider.url);
     await sendMessage({ type: 'SYNC_PERMISSION', providerId: selectedProvider.id, granted });
-    setMessage(granted ? 'Host access granted.' : 'Host access was denied.');
+    setMessage(granted ? t('options.msgAccessGranted') : t('options.msgAccessDenied'));
     reload();
   };
 
   const trackSelected = async (metricId?: string, pickerMode: 'metrics' | 'reset' = 'metrics', resetFirst = false) => {
-    if (!selectedProvider) return;
+    if (!t || !selectedProvider) return;
     let granted = await permissionFor(selectedProvider.url);
     if (!granted) {
       granted = await requestPermission(selectedProvider.url);
       await sendMessage({ type: 'SYNC_PERMISSION', providerId: selectedProvider.id, granted });
     }
     if (!granted) {
-      setMessage('Host access is required before teaching this page.');
+      setMessage(t('options.msgTeachNeedAccess'));
       reload();
       return;
     }
@@ -248,11 +262,11 @@ function OptionsApp() {
       /* options may not expose getCurrent in all hosts */
     }
     if (resetFirst) {
-      setMessage('Clearing broken tracks…');
+      setMessage(t('options.msgClearingTracks'));
       await sendMessage({ type: 'RESET_TEACH', providerId: selectedProvider.id });
       reload();
     }
-    setMessage(pickerMode === 'reset' ? 'Starting teach mode (reset)…' : 'Starting teach mode…');
+    setMessage(pickerMode === 'reset' ? t('options.msgStartTeachReset') : t('options.msgStartTeach'));
     const result = await sendMessage<{ started?: boolean; reason?: string }>({
       type: 'START_PICKER',
       providerId: selectedProvider.id,
@@ -261,47 +275,46 @@ function OptionsApp() {
     });
     if (result?.started === false) {
       const detail = result.reason === 'permission_denied'
-        ? 'Host access is required. Grant permission and try again.'
+        ? t('options.msgTeachPermDenied')
         : result.reason === 'content_script_unreachable'
-          ? 'Could not attach teach mode. Open the usage page (e.g. grok.com/?_s=usage), wait for it to load, then try again.'
-          : 'Unable to open teach mode. Check host access and that the usage page URL is correct.';
+          ? t('options.msgTeachUnreachable')
+          : t('options.msgTeachFailed');
       setMessage(detail);
       return;
     }
-    setMessage(pickerMode === 'reset'
-      ? 'Teaching tab is ready. Choose the reset date or countdown, then select Done and return.'
-      : 'Teaching tab is ready. Click the big total (e.g.「使用済」), not a small legend chip. Then Done and return.');
+    setMessage(pickerMode === 'reset' ? t('options.msgTeachReadyReset') : t('options.msgTeachReady'));
   };
 
   const onIconFile = async (file: File | null) => {
-    if (!file) return;
+    if (!t || !file) return;
     try {
       const iconDataUrl = await fileToIconDataUrl(file);
       updateDraft('iconDataUrl', iconDataUrl);
-      setMessage('Icon ready. Save to apply.');
+      setMessage(t('options.msgIconReady'));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to read that image.');
+      setMessage(error instanceof Error ? error.message : t('options.msgIconFail'));
     }
   };
 
   const clearIcon = () => {
+    if (!t) return;
     updateDraft('iconDataUrl', undefined);
-    setMessage('Icon cleared. Save to apply.');
+    setMessage(t('options.msgIconCleared'));
   };
 
   const renameMetric = async (metricId: string, currentLabel: string) => {
-    if (!selectedProvider) return;
-    const label = window.prompt('Metric name', currentLabel)?.trim();
+    if (!t || !selectedProvider) return;
+    const label = window.prompt(t('options.metricNamePrompt'), currentLabel)?.trim();
     if (!label) return;
     await sendMessage({ type: 'RENAME_METRIC', providerId: selectedProvider.id, metricId, label });
-    setMessage('Tracked metric renamed.');
+    setMessage(t('options.msgMetricRenamed'));
     reload();
   };
 
   const removeMetric = async (metricId: string) => {
-    if (!selectedProvider) return;
+    if (!t || !selectedProvider) return;
     await sendMessage({ type: 'REMOVE_METRIC', providerId: selectedProvider.id, metricId });
-    setMessage('Tracked metric removed.');
+    setMessage(t('options.msgMetricRemoved'));
     reload();
   };
 
@@ -323,21 +336,67 @@ function OptionsApp() {
     setSamplesDialogOpen(true);
   };
 
+  const formatImportMessage = (result: { added: string[]; skipped: string[]; replaced: string[] }): string => {
+    if (result.added.length === 0 && result.replaced.length === 0) {
+      return t?.('samples.alreadyRegistered') ?? 'Already registered';
+    }
+    const base = t?.('samples.added', {
+      count: result.added.length + result.replaced.length,
+      skipped: result.skipped.length,
+    }) ?? `Added ${result.added.length}`;
+    const next = t?.('samples.nextSteps') ?? '';
+    return next ? `${base} ${next}` : base;
+  };
+
+  const mergeStarterProviders = async (providers: import('../shared/schema').ProviderConfig[]) => {
+    let result = await applyStarterProviders(providers);
+    if (result.added.length === 0 && result.skipped.length > 0 && result.replaced.length === 0) {
+      const shouldReplace = window.confirm(
+        t?.('samples.replaceConfirm', { count: result.skipped.length })
+          ?? `Overwrite ${result.skipped.length} existing providers?`,
+      );
+      if (shouldReplace) {
+        result = await applyStarterProviders(providers, { replaceExisting: true });
+      }
+    }
+    return result;
+  };
+
   const importSamples = async () => {
     setSamplesLoading(true);
     setSamplesError('');
     try {
-      const providers = await fetchProvidersRegistry();
-      const result = await applyRegistryProviders(providers);
+      const providers = await fetchStarterPack();
+      const result = await mergeStarterProviders(providers);
       setSamplesDialogOpen(false);
-      setMessage(result.added.length > 0
-        ? `Added ${result.added.length} sample providers. Open each usage page and teach the visible value.`
-        : 'Sample providers are already registered. Existing settings were not changed.');
+      setMessage(formatImportMessage(result));
       reload();
     } catch (error) {
-      setSamplesError(error instanceof Error ? error.message : (t?.('samples.errorFallback') ?? 'Unable to fetch sample providers.'));
+      setSamplesError(error instanceof Error ? error.message : (t?.('samples.errorFallback') ?? 'Unable to import starter pack.'));
     } finally {
       setSamplesLoading(false);
+    }
+  };
+
+  const importPastedStarter = async () => {
+    if (!t) return;
+    const text = pasteText.trim();
+    if (!text) {
+      setMessage(t('samples.pasteEmpty'));
+      return;
+    }
+    setPasteLoading(true);
+    setMessage('');
+    try {
+      const providers = await parseStarterPackText(text);
+      const result = await mergeStarterProviders(providers);
+      setPasteText('');
+      setMessage(formatImportMessage(result));
+      reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('samples.errorFallback'));
+    } finally {
+      setPasteLoading(false);
     }
   };
 
@@ -385,6 +444,19 @@ function OptionsApp() {
     }
   };
 
+  const copyTrackJson = async (metric: TaughtMetric) => {
+    try {
+      await navigator.clipboard.writeText(formatTrackJson(metric));
+      setCopiedTrackId(metric.metricId);
+      window.setTimeout(() => {
+        setCopiedTrackId((current) => (current === metric.metricId ? null : current));
+      }, 1600);
+    } catch {
+      // Clipboard may be blocked; details panel already shows the JSON for manual copy.
+      setCopiedTrackId(null);
+    }
+  };
+
   /** Always copy first — Issue Forms often drop ?body= prefill. */
   const openGitHubIssue = async () => {
     if (!t) return;
@@ -416,7 +488,7 @@ function OptionsApp() {
         <div class="brand">
           <img class="app-icon" src={chrome.runtime.getURL('assets/icons/icon-192.png')} width={28} height={28} alt="" />
           <strong>many-ai-usage</strong>
-          <span>Settings · v{extensionVersion}</span>
+          <span>{t('options.settingsTitle', { version: extensionVersion })}</span>
         </div>
         <div class="header-actions">
           <label class="locale-select-wrap">
@@ -434,30 +506,37 @@ function OptionsApp() {
               ))}
             </select>
           </label>
-          <span class="privacy-note">Local-only · read-only page capture</span>
+          <span class="privacy-note">{t('options.privacyNote')}</span>
         </div>
       </header>
       <div class="options-layout">
         <aside class="sidebar">
-          <button class="add-button" onClick={() => select('new')}>＋ New provider</button>
+          <button class="add-button" onClick={() => select('new')}>{t('options.newProvider')}</button>
           {showTrySamples && <div class="samples-onboarding">
-            <strong>Need a starting point?</strong>
-            <span>Fetch six URL-only samples, then teach the values you want to track.</span>
-            <button class="samples-button" onClick={openSamplesDialog}>Try samples ▸</button>
+            <strong>{t('samples.onboardingTitle')}</strong>
+            <span>{t('samples.onboardingBody')}</span>
+            <button class="samples-button" onClick={openSamplesDialog}>{t('samples.trySamples')}</button>
             <a href={USAGE_GUIDE_URL} target="_blank" rel="noopener noreferrer">{t('usageGuide.link')}</a>
           </div>}
-          <div class="sidebar-label">Registered providers</div>
+          <div class="sidebar-label">{t('options.registeredProviders')}</div>
           <div class="provider-sidebar-list">
             {dashboard.providers.map((provider) => {
               const state = dashboard.runtimeStates[provider.id];
               const snapshot = dashboard.snapshots[provider.id];
               const lowest = snapshot?.metrics.map(remainingPercent).filter((value): value is number => value != null).sort((a, b) => a - b)[0];
+              const sub = lowest != null
+                ? t('options.remainingPercent', { n: Math.round(lowest) })
+                : state.status === 'needs_permission'
+                  ? t('options.needsAccess')
+                  : snapshot?.source === 'page_only'
+                    ? t('options.tile')
+                    : t('options.notCaptured');
               return <button key={provider.id} class={`sidebar-provider ${selectedId === provider.id ? 'selected' : ''}`} draggable onDragStart={() => setDraggedId(provider.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => draggedId && void reorder(draggedId, provider.id)} onClick={() => select(provider.id)}>
                 <span class="drag-handle">☰</span>
                 {provider.iconDataUrl
                   ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" />
                   : <span class="provider-icon placeholder" aria-hidden="true" />}
-                <span class="sidebar-provider-main"><strong>{provider.displayName}</strong><small>{lowest != null ? `${Math.round(lowest)}% remaining` : state.status === 'needs_permission' ? 'Needs access' : snapshot?.source === 'page_only' ? 'tile' : 'Not captured'}</small></span><span class={`sidebar-state ${state.status}`}>{state.status === 'needs_permission' ? t('sidebar.needsPermission') : snapshot?.source === 'page_only' ? 'tile' : ''}</span>
+                <span class="sidebar-provider-main"><strong>{provider.displayName}</strong><small>{sub}</small></span><span class={`sidebar-state ${state.status}`}>{state.status === 'needs_permission' ? t('sidebar.needsPermission') : snapshot?.source === 'page_only' ? t('options.tile') : ''}</span>
               </button>;
             })}
           </div>
@@ -467,56 +546,112 @@ function OptionsApp() {
         </aside>
         <main class="main-panel">
           <div class="panel-heading">
-            <div><h1>{selectedId === 'new' ? 'New provider' : selectedProvider?.displayName ?? 'Select a provider'}</h1>{selectedProvider && <span class={`status-badge ${selectedState?.status}`}>{statusLabel(selectedState!)}</span>}</div>
-            {selectedProvider && <span class="last-captured">{ageLabel(selectedSnapshot?.capturedAt ?? null)}</span>}
+            <div><h1>{selectedId === 'new' ? t('options.newProviderHeading') : selectedProvider?.displayName ?? t('options.selectProvider')}</h1>{selectedProvider && <span class={`status-badge ${selectedState?.status}`}>{statusLabel(selectedState!, t)}</span>}</div>
+            {selectedProvider && <span class="last-captured">{ageLabel(selectedSnapshot?.capturedAt ?? null, t)}</span>}
           </div>
-          {selectedProvider && selectedState?.status === 'needs_permission' && <div class="permission-callout"><div><strong>Host access is required</strong><span>Allow access to parse visible usage data in your browser session.</span></div><div><button onClick={() => void allowSelected()}>Allow access</button><button class="danger-button" onClick={() => void remove()}>Delete</button></div></div>}
+          {selectedProvider && selectedState?.status === 'needs_permission' && <div class="permission-callout"><div><strong>{t('options.hostAccessRequired')}</strong><span>{t('options.hostAccessBody')}</span></div><div><button onClick={() => void allowSelected()}>{t('options.allowAccess')}</button><button class="danger-button" onClick={() => void remove()}>{t('common.delete')}</button></div></div>}
           {selectedId === 'new' || selectedProvider ? <>
-            {selectedProvider && <section class="current-section"><div class="section-heading"><h2>Current usage</h2><div class="section-actions"><button onClick={() => void sendMessage({ type: 'REFRESH_PROVIDER', providerId: selectedProvider.id }).then(reload)}>↻ Refresh now</button><button onClick={() => void sendMessage({ type: 'OPEN_PROVIDER', providerId: selectedProvider.id })}>↗ Open page</button></div></div>{selectedSnapshot?.metrics.length ? <div class="metric-grid">{selectedSnapshot.metrics.map((metric) => <div class="metric-card" key={metric.id}><span>{metric.window.label}</span><strong>{formatMetric(metric)}</strong><small>{metric.label}</small></div>)}</div> : <div class="no-metrics">No normalized usage values yet. Open the registered page after allowing host access.</div>}</section>}
+            {selectedProvider && <section class="current-section"><div class="section-heading"><h2>{t('options.currentUsage')}</h2><div class="section-actions"><button onClick={() => void sendMessage({ type: 'REFRESH_PROVIDER', providerId: selectedProvider.id }).then(reload)}>{t('options.refreshNow')}</button><button onClick={() => void sendMessage({ type: 'OPEN_PROVIDER', providerId: selectedProvider.id })}>{t('options.openPage')}</button></div></div>{selectedSnapshot?.metrics.length ? <div class="metric-grid">{selectedSnapshot.metrics.map((metric) => <div class="metric-card" key={metric.id}><span>{metric.window.label}</span><strong>{formatMetric(metric)}</strong><small>{metric.label}</small></div>)}</div> : <div class="no-metrics">{t('options.noMetrics')}</div>}</section>}
             <section class="form-section">
-              <div class="section-heading"><h2>Provider settings</h2><span>URL and display settings</span></div>
-              <label>Display name<input value={draft.displayName} onInput={(event) => updateDraft('displayName', event.currentTarget.value)} placeholder="Example AI" /></label>
-              <label>Usage page URL<input value={draft.url} onInput={(event) => updateDraft('url', event.currentTarget.value)} placeholder="https://example.com/account/usage" /></label>
-              <p class="help-text">The page is read in your browser session. Cookies, tokens, and raw HTML are never stored or sent elsewhere.</p>
+              <div class="section-heading"><h2>{t('options.providerSettings')}</h2><span>{t('options.providerSettingsHint')}</span></div>
+              <label>{t('options.displayName')}<input value={draft.displayName} onInput={(event) => updateDraft('displayName', event.currentTarget.value)} placeholder={t('options.displayNamePlaceholder')} /></label>
+              <label>{t('options.usagePageUrl')}<input value={draft.url} onInput={(event) => updateDraft('url', event.currentTarget.value)} placeholder={t('options.usagePageUrlPlaceholder')} /></label>
+              <p class="help-text">{t('options.urlHelp')}</p>
               <div class="icon-field">
                 <div class="icon-preview-wrap">
                   {draft.iconDataUrl
                     ? <img class="icon-preview" src={draft.iconDataUrl} alt="" />
                     : <span class="icon-preview placeholder" aria-hidden="true" />}
                   <div>
-                    <strong>Custom icon</strong>
-                    <p class="help-text">Optional. Upload your own image — provider brand/favicon is never auto-loaded (trademark &amp; privacy). Stored only in this browser.</p>
+                    <strong>{t('options.customIcon')}</strong>
+                    <p class="help-text">{t('options.customIconHelp')}</p>
                     <div class="icon-actions">
                       <label class="file-button">
-                        Choose image
+                        {t('options.chooseImage')}
                         <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(event) => {
                           const input = event.currentTarget;
                           void onIconFile(input.files?.[0] ?? null).finally(() => { input.value = ''; });
                         }} />
                       </label>
-                      <button type="button" disabled={!draft.iconDataUrl} onClick={clearIcon}>Remove</button>
+                      <button type="button" disabled={!draft.iconDataUrl} onClick={clearIcon}>{t('common.remove')}</button>
                     </div>
                   </div>
                 </div>
               </div>
               <div class="form-grid">
-                <label>Refresh interval (minutes)<input type="number" min="3" max="240" value={draft.refreshIntervalMinutes} onInput={(event) => updateDraft('refreshIntervalMinutes', Number(event.currentTarget.value))} /></label>
-                <label>Mode<select value={draft.mode} onChange={(event) => updateDraft('mode', event.currentTarget.value as ProviderMode)}><option value="auto">Auto detect (candidate preview)</option><option value="taught">User taught</option><option value="embed">Page tile</option></select></label>
+                <label>{t('options.refreshInterval')}<input type="number" min="3" max="240" value={draft.refreshIntervalMinutes} onInput={(event) => updateDraft('refreshIntervalMinutes', Number(event.currentTarget.value))} /></label>
+                <label>{t('options.mode')}<select value={draft.mode} onChange={(event) => updateDraft('mode', event.currentTarget.value as ProviderMode)}><option value="auto">{t('options.modeAuto')}</option><option value="taught">{t('options.modeTaught')}</option><option value="embed">{t('options.modeEmbed')}</option></select></label>
               </div>
-              {selectedProvider && <div class="teach-panel"><div><strong>Teach this page</strong><p class="help-text">Opens teach mode on the usage page. Click the big total (e.g.「使用済」), not a small legend chip, then Done and return.</p></div><div class="teach-panel-actions"><button class="primary-button" onClick={() => void trackSelected()}>＋ Track this element</button>{selectedProvider.metrics.length > 0 && <button class="primary-button" onClick={() => void trackSelected(undefined, 'metrics', true)}>Fix tracking (clear &amp; re-teach)</button>}</div></div>}
-              {selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics"><strong>Tracked elements</strong>{selectedProvider.metrics.map((metric) => { const lastValue = selectedSnapshot?.metrics.find((item) => item.id === metric.metricId); const unread = !lastValue; return <div class="taught-metric" key={metric.metricId}><span><b>{metric.label}</b><small>{metric.windowLabel ?? '—'} · {metric.valueAnchor?.selectors[0] ?? 'no selector'} · last: {lastValue ? formatMetric(lastValue) : 'not read'}</small>{unread ? <small class="teach-unread-hint">Broken track. Click「Fix tracking」above, open usage sheet, teach the big「使用済」total.</small> : null}</span><span class="metric-actions"><button onClick={() => void renameMetric(metric.metricId, metric.label)}>Rename</button><button onClick={() => void trackSelected(metric.metricId)}>Re-teach value</button><button onClick={() => void trackSelected(metric.metricId, 'reset')}>Re-teach reset</button><button onClick={() => void removeMetric(metric.metricId)}>Delete</button></span></div>; })}</div>}
+              {selectedProvider && <div class="teach-panel"><div><strong>{t('options.teachTitle')}</strong><p class="help-text">{t('options.teachHelp')}</p></div><div class="teach-panel-actions"><button class="primary-button" onClick={() => void trackSelected()}>{t('options.trackElement')}</button>{selectedProvider.metrics.length > 0 && <button class="primary-button" onClick={() => void trackSelected(undefined, 'metrics', true)}>{t('options.fixTracking')}</button>}</div></div>}
+              {selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics">
+                <strong>{t('options.trackedElements')}</strong>
+                {selectedProvider.metrics.map((metric) => {
+                  const lastValue = selectedSnapshot?.metrics.find((item) => item.id === metric.metricId);
+                  const unread = !lastValue;
+                  const trackJson = formatTrackJson(metric);
+                  return (
+                    <div class="taught-metric" key={metric.metricId}>
+                      <div class="taught-metric-row">
+                        <span>
+                          <b>{metric.label}</b>
+                          <small>{metric.windowLabel ?? '—'} · {metric.valueAnchor?.selectors[0] ?? t('options.noSelector')} · {t('options.lastRead', { value: lastValue ? formatMetric(lastValue) : t('options.notRead') })}</small>
+                          {unread ? <small class="teach-unread-hint">{t('options.brokenTrack')}</small> : null}
+                        </span>
+                        <span class="metric-actions">
+                          <button type="button" onClick={() => void renameMetric(metric.metricId, metric.label)}>{t('common.rename')}</button>
+                          <button type="button" onClick={() => void trackSelected(metric.metricId)}>{t('options.reteachValue')}</button>
+                          <button type="button" onClick={() => void trackSelected(metric.metricId, 'reset')}>{t('options.reteachReset')}</button>
+                          <button type="button" onClick={() => void removeMetric(metric.metricId)}>{t('common.delete')}</button>
+                        </span>
+                      </div>
+                      <details class="track-json">
+                        <summary>{t('options.trackJsonSummary')}</summary>
+                        <div class="track-json-toolbar">
+                          <button type="button" onClick={() => void copyTrackJson(metric)}>
+                            {copiedTrackId === metric.metricId ? t('options.trackJsonCopied') : t('options.trackJsonCopy')}
+                          </button>
+                        </div>
+                        <pre>{trackJson}</pre>
+                      </details>
+                    </div>
+                  );
+                })}
+              </div>}
             </section>
-            {selectedProvider && <section class="diagnostic-section"><div class="section-heading"><h2>Diagnostics</h2><span>{selectedState?.errorLabel ?? 'Evidence summary'}</span></div><dl class="diagnostic-grid"><dt>Status</dt><dd>{selectedState?.status ?? 'never_seen'}</dd><dt>Source</dt><dd>{selectedSnapshot?.source ?? '—'}</dd><dt>Confidence</dt><dd>{selectedState?.confidence ?? 'none'}</dd><dt>Last captured</dt><dd>{ageLabel(selectedSnapshot?.capturedAt ?? null)}</dd><dt>Stale threshold</dt><dd>{draft.refreshIntervalMinutes * 2} minutes</dd><dt>Evidence</dt><dd>{selectedState?.evidenceSummary.join(' · ') || '—'}</dd></dl></section>}
-            <div class="form-footer"><button class="danger-button" disabled={!selectedProvider} onClick={() => void remove()}>Delete</button><div><button disabled={!dirty} onClick={() => { if (selectedProvider) setDraft(draftFrom(selectedProvider)); else setDraft(blankDraft(dashboard.providers.length)); setDirty(false); setMessage(''); }}>Discard changes</button><button class="primary-button" disabled={!dirty} onClick={() => void save()}>Save</button></div></div>
+            {selectedProvider && <section class="diagnostic-section"><div class="section-heading"><h2>{t('options.diagnostics')}</h2><span>{selectedState?.errorLabel ?? t('options.evidenceSummary')}</span></div><dl class="diagnostic-grid"><dt>{t('options.diagStatus')}</dt><dd>{selectedState ? statusLabel(selectedState, t) : t('status.never_seen')}</dd><dt>{t('options.diagSource')}</dt><dd>{selectedSnapshot?.source ?? '—'}</dd><dt>{t('options.diagConfidence')}</dt><dd>{selectedState?.confidence ?? 'none'}</dd><dt>{t('options.diagLastCaptured')}</dt><dd>{ageLabel(selectedSnapshot?.capturedAt ?? null, t)}</dd><dt>{t('options.diagStaleThreshold')}</dt><dd>{t('options.minutesUnit', { n: draft.refreshIntervalMinutes * 2 })}</dd><dt>{t('options.diagEvidence')}</dt><dd>{selectedState?.evidenceSummary.join(' · ') || '—'}</dd></dl></section>}
+            <div class="form-footer"><button class="danger-button" disabled={!selectedProvider} onClick={() => void remove()}>{t('common.delete')}</button><div><button disabled={!dirty} onClick={() => { if (selectedProvider) setDraft(draftFrom(selectedProvider)); else setDraft(blankDraft(dashboard.providers.length)); setDirty(false); setMessage(''); }}>{t('options.discardChanges')}</button><button class="primary-button" disabled={!dirty} onClick={() => void save()}>{t('common.save')}</button></div></div>
             {message && <p class="save-message" role="status">{message}</p>}
-          </> : <div class="empty-panel">Choose a provider, or add a new usage page.</div>}
+          </> : <div class="empty-panel">{t('options.emptyPanel')}</div>}
+          <details class="starter-paste">
+            <summary>{t('samples.pasteSummary')}</summary>
+            <p class="help-text">{t('samples.pasteHelp')}</p>
+            <textarea
+              class="starter-paste-input"
+              rows={8}
+              value={pasteText}
+              placeholder={t('samples.pastePlaceholder')}
+              onInput={(event) => setPasteText(event.currentTarget.value)}
+              spellcheck={false}
+            />
+            <div class="starter-paste-actions">
+              <button
+                type="button"
+                class="primary-button"
+                disabled={pasteLoading}
+                onClick={() => void importPastedStarter()}
+              >
+                {pasteLoading ? t('samples.fetching') : t('samples.pasteImport')}
+              </button>
+            </div>
+          </details>
+          {message && !selectedProvider && selectedId !== 'new' && <p class="save-message" role="status">{message}</p>}
         </main>
       </div>
       {samplesDialogOpen && <div class="samples-dialog-backdrop">
         <section class="samples-dialog" role="dialog" aria-modal="true" aria-labelledby="samples-dialog-title">
           <h2 id="samples-dialog-title">{t('samples.dialogTitle')}</h2>
           <p>{t('samples.dialogLead')}</p>
-          <code>{PROVIDERS_REGISTRY_URL}</code>
+          <code>{STARTER_PACK_URL}</code>
           <p>{t('samples.dialogBody')}</p>
           {samplesError && <p class="samples-error" role="alert">{samplesError}</p>}
           <div class="samples-dialog-actions">

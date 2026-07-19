@@ -16,12 +16,12 @@ import { sendMessage } from '../shared/runtime';
 import { originPattern } from '../shared/url';
 import './styles.css';
 
-function teachFailMessage(reason?: string): string {
-  if (reason === 'permission_denied') return 'Host permission is required. Click Allow access, then Re-teach again.';
-  if (reason === 'provider_missing') return 'Provider was not found. Open Settings and check Grok is registered.';
-  if (reason === 'content_script_unreachable') return 'Could not attach teach mode on the page. Open https://grok.com/?_s=usage , then Re-teach again.';
-  if (reason === 'tab_create_failed') return 'Could not open a browser tab for teaching.';
-  return 'Could not start teach mode. Open the usage page and try Re-teach again.';
+function teachFailMessage(t: TranslateFn, reason?: string): string {
+  if (reason === 'permission_denied') return t('popup.teachFailPerm');
+  if (reason === 'provider_missing') return t('popup.teachFailMissing');
+  if (reason === 'content_script_unreachable') return t('popup.teachFailUnreachable');
+  if (reason === 'tab_create_failed') return t('popup.teachFailTab');
+  return t('popup.teachFailGeneric');
 }
 
 function level(metric: NormalizedMetric): string {
@@ -80,7 +80,7 @@ function openOptions(providerId?: string) {
 }
 
 function openSampleOptions() {
-  void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?trySamples=1'), active: true });
+  void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?importStarter=1'), active: true });
 }
 
 function openUsageGuide() {
@@ -98,7 +98,7 @@ async function allowAccess(provider: ProviderConfig, reload: () => void): Promis
   reload();
 }
 
-function MiniMetric({ metric, lowest }: { metric: NormalizedMetric; lowest: boolean }) {
+function MiniMetric({ metric, lowest, t }: { metric: NormalizedMetric; lowest: boolean; t: TranslateFn }) {
   const value = remainingPercent(metric);
   return (
     <div class={`mini-metric ${lowest ? 'lowest' : ''}`} title={metric.evidence.value}>
@@ -108,12 +108,18 @@ function MiniMetric({ metric, lowest }: { metric: NormalizedMetric; lowest: bool
         <strong>{formatMetric(metric)}</strong>
       </div>
       <div class="mini-bar" aria-hidden="true"><span class={`bar-fill ${level(metric)}`} style={{ width: `${Math.max(0, Math.min(100, value ?? 0))}%` }} /></div>
-      <div class="reset-label">{resetLabel(metric)}</div>
+      <div class="reset-label">{resetLabel(metric, t)}</div>
     </div>
   );
 }
 
-function ProviderRow({ provider, snapshot, state, reload }: { provider: ProviderConfig; snapshot: DashboardResponse['snapshots'][string]; state: ProviderRuntimeState; reload: () => void }) {
+function ProviderRow({ provider, snapshot, state, reload, t }: {
+  provider: ProviderConfig;
+  snapshot: DashboardResponse['snapshots'][string];
+  state: ProviderRuntimeState;
+  reload: () => void;
+  t: TranslateFn;
+}) {
   const [expanded, setExpanded] = useState(false);
   const lowest = useMemo(() => lowestMetric(snapshot?.metrics ?? []), [snapshot]);
   const metrics = snapshot?.metrics ?? [];
@@ -127,19 +133,21 @@ function ProviderRow({ provider, snapshot, state, reload }: { provider: Provider
           <span class="provider-name-text">{provider.displayName}</span>
         </div>
         <div class="windows" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(3, metrics.length))}, minmax(0, 1fr))` }}>
-          {metrics.length > 0 ? metrics.map((metric) => <MiniMetric key={metric.id} metric={metric} lowest={metric.id === lowest} />) : <span class="empty-value">No usage captured</span>}
+          {metrics.length > 0
+            ? metrics.map((metric) => <MiniMetric key={metric.id} metric={metric} lowest={metric.id === lowest} t={t} />)
+            : <span class="empty-value">{t('popup.noUsageCaptured')}</span>}
         </div>
-        <button class="icon-button" onClick={() => refresh(provider.id, reload)} title="Refresh now" aria-label={`Refresh ${provider.displayName}`}>↻</button>
-        <button class="icon-button" onClick={() => setExpanded((value) => !value)} title="Show details" aria-expanded={expanded} aria-label={`Details for ${provider.displayName}`}>{expanded ? '▴' : '▾'}</button>
+        <button class="icon-button" onClick={() => refresh(provider.id, reload)} title={t('popup.refresh')} aria-label={t('popup.refreshAria', { name: provider.displayName })}>↻</button>
+        <button class="icon-button" onClick={() => setExpanded((value) => !value)} title={t('popup.details')} aria-expanded={expanded} aria-label={t('popup.detailsAria', { name: provider.displayName })}>{expanded ? '▴' : '▾'}</button>
       </div>
       {expanded && (
         <div class="row-details">
-          <span>confidence: {state.confidence}</span>
-          <span>source: {snapshot?.source ?? '—'}</span>
-          <span>captured: {ageLabel(snapshot?.capturedAt ?? null)}</span>
+          <span>{t('popup.confidence', { value: state.confidence })}</span>
+          <span>{t('popup.source', { value: snapshot?.source ?? '—' })}</span>
+          <span>{t('popup.captured', { value: ageLabel(snapshot?.capturedAt ?? null, t) })}</span>
           <div class="row-actions">
-            <button onClick={() => void sendMessage({ type: 'OPEN_PROVIDER', providerId: provider.id })}>↗ Open page</button>
-            <button onClick={() => openOptions(provider.id)}>⚙ Settings</button>
+            <button onClick={() => void sendMessage({ type: 'OPEN_PROVIDER', providerId: provider.id })}>{t('popup.openPage')}</button>
+            <button onClick={() => openOptions(provider.id)}>{t('popup.settings')}</button>
           </div>
         </div>
       )}
@@ -147,7 +155,13 @@ function ProviderRow({ provider, snapshot, state, reload }: { provider: Provider
   );
 }
 
-function IssueCard({ provider, snapshot, state, reload }: { provider: ProviderConfig; snapshot: DashboardResponse['snapshots'][string]; state: ProviderRuntimeState; reload: () => void }) {
+function IssueCard({ provider, snapshot, state, reload, t }: {
+  provider: ProviderConfig;
+  snapshot: DashboardResponse['snapshots'][string];
+  state: ProviderRuntimeState;
+  reload: () => void;
+  t: TranslateFn;
+}) {
   const [teachError, setTeachError] = useState('');
   const [teachBusy, setTeachBusy] = useState(false);
   const tile = snapshot?.source === 'page_only';
@@ -164,23 +178,23 @@ function IssueCard({ provider, snapshot, state, reload }: { provider: ProviderCo
   );
   const showTrack = state.status !== 'needs_permission' && taughtMetrics.length === 0 && !tile;
   const title = state.status === 'needs_permission'
-    ? 'Permission needed'
+    ? t('popup.permissionNeeded')
     : needsTeaching || reteachMentioned
-      ? 'Re-teach needed'
+      ? t('popup.reteachNeeded')
       : tile
-        ? 'Page tile'
+        ? t('popup.pageTile')
         : state.status === 'never_seen'
-          ? 'Ready to capture'
-          : statusLabel(state);
+          ? t('popup.readyToCapture')
+          : statusLabel(state, t);
   const body = state.status === 'needs_permission'
-    ? 'Allow access to this usage page so the dashboard can read its visible data locally.'
+    ? t('popup.permissionBody')
     : needsTeaching
-      ? 'The taught value was not found three times. Track the value again on the usage page.'
+      ? t('popup.reteachBody')
       : reteachMessage
         ? reteachMessage
         : tile
-          ? 'No confident usage metric was found. Keep this page as a link tile, or try parsing again.'
-          : state.errorLabel ?? 'Open the page once to capture a local snapshot.';
+          ? t('popup.tileBody')
+          : state.errorLabel ?? t('popup.openOnce');
   const ensurePermission = async (): Promise<boolean> => {
     try {
       const origin = originPattern(provider.url);
@@ -189,7 +203,7 @@ function IssueCard({ provider, snapshot, state, reload }: { provider: ProviderCo
       const granted = await chrome.permissions.request({ origins: [origin] });
       await sendMessage({ type: 'SYNC_PERMISSION', providerId: provider.id, granted });
       if (!granted) {
-        setTeachError(teachFailMessage('permission_denied'));
+        setTeachError(teachFailMessage(t, 'permission_denied'));
         return false;
       }
       return true;
@@ -214,13 +228,13 @@ function IssueCard({ provider, snapshot, state, reload }: { provider: ProviderCo
           metricId: options?.resetFirst ? undefined : metricId,
         });
         if (!result?.started) {
-          setTeachError(teachFailMessage(result?.reason));
+          setTeachError(teachFailMessage(t, result?.reason));
           obsLog('popup.teach.failed', { providerId: provider.id, reason: result?.reason ?? 'unknown' });
         } else {
           window.close();
         }
       } catch (error) {
-        setTeachError(teachFailMessage());
+        setTeachError(teachFailMessage(t));
         obsLog('popup.teach.exception', { error: error instanceof Error ? error.name : 'unknown' });
       } finally {
         setTeachBusy(false);
@@ -238,28 +252,28 @@ function IssueCard({ provider, snapshot, state, reload }: { provider: ProviderCo
       <p>{body}</p>
       {teachError ? <p class="teach-error">{teachError}</p> : null}
       <div class="issue-actions">
-        {state.status === 'needs_permission' && <button onClick={() => void allowAccess(provider, reload)}>Allow access</button>}
+        {state.status === 'needs_permission' && <button onClick={() => void allowAccess(provider, reload)}>{t('popup.allowAccess')}</button>}
         {showReteach && (
           <button
             class="primary-action"
             disabled={teachBusy}
             onClick={() => startTeach(undefined, { resetFirst: true })}
-            title="Delete broken tracks and open teach mode for a clean total"
+            title={t('popup.fixTrackingTitle')}
           >
-            Fix tracking
+            {t('popup.fixTracking')}
           </button>
         )}
         {showReteach && taughtMetrics.length > 0
           ? taughtMetrics.map((metric) => (
             <button key={metric.metricId} disabled={teachBusy} onClick={() => startTeach(metric.metricId)}>
-              {taughtMetrics.length === 1 ? 'Re-teach' : `Re-teach ${metric.label}`}
+              {taughtMetrics.length === 1 ? t('popup.reteach') : t('popup.reteachNamed', { label: metric.label })}
             </button>
           ))
           : null}
-        {showTrack && <button class="primary-action" disabled={teachBusy} onClick={() => startTeach()}>＋ Track</button>}
-        <button onClick={() => void sendMessage({ type: 'OPEN_PROVIDER', providerId: provider.id })}>↗ Open</button>
-        <button onClick={() => refresh(provider.id, reload)}>{tile ? 'Re-parse' : 'Capture'}</button>
-        {state.status === 'needs_permission' && <button class="danger-button" onClick={() => void sendMessage({ type: 'DELETE_PROVIDER', providerId: provider.id }).then(reload)}>Delete</button>}
+        {showTrack && <button class="primary-action" disabled={teachBusy} onClick={() => startTeach()}>{t('popup.track')}</button>}
+        <button onClick={() => void sendMessage({ type: 'OPEN_PROVIDER', providerId: provider.id })}>{t('popup.open')}</button>
+        <button onClick={() => refresh(provider.id, reload)}>{tile ? t('popup.reparse') : t('popup.capture')}</button>
+        {state.status === 'needs_permission' && <button class="danger-button" onClick={() => void sendMessage({ type: 'DELETE_PROVIDER', providerId: provider.id }).then(reload)}>{t('common.delete')}</button>}
       </div>
     </article>
   );
@@ -312,7 +326,7 @@ function PopupApp() {
     void setStoredUiLocale(code).then(() => applyI18n());
   };
 
-  if (!dashboard || !t) return <div class="popup-shell loading">{t?.('common.loading') ?? 'Loading…'}</div>;
+  if (!dashboard || !t) return <div class="popup-shell loading">{t?.('popup.loading') ?? t?.('common.loading') ?? 'Loading…'}</div>;
   const normal = dashboard.providers.filter((provider) => {
     const state = dashboard.runtimeStates[provider.id];
     const snapshot = dashboard.snapshots[provider.id];
@@ -346,13 +360,50 @@ function PopupApp() {
         </div>
       </header>
       <section class="provider-list" aria-label="Usage providers">
-        {normal.length === 0 && <div class="empty-state"><strong>{dashboard.providers.length === 0 ? 'No providers yet' : 'Nothing captured yet'}</strong><span>{dashboard.providers.length === 0 ? 'Try six URL-only samples, or add your own usage page.' : 'Open a registered usage page to begin.'}</span>{dashboard.providers.length === 0 && <div class="empty-actions"><button class="sample-button" onClick={openSampleOptions}>Try samples ▸</button><button onClick={openUsageGuide}>{t('usageGuide.link')}</button></div>}</div>}
-        {normal.map((provider) => <ProviderRow key={provider.id} provider={provider} snapshot={dashboard.snapshots[provider.id]} state={dashboard.runtimeStates[provider.id]} reload={reload} />)}
+        {normal.length === 0 && (
+          <div class="empty-state">
+            <strong>{dashboard.providers.length === 0 ? t('popup.noProviders') : t('popup.nothingCaptured')}</strong>
+            <span>{dashboard.providers.length === 0 ? t('popup.emptyNoProviders') : t('popup.emptyOpenPage')}</span>
+            {dashboard.providers.length === 0 && (
+              <div class="empty-actions">
+                <button class="sample-button" onClick={openSampleOptions}>{t('samples.trySamples')}</button>
+                <button onClick={openUsageGuide}>{t('usageGuide.link')}</button>
+              </div>
+            )}
+          </div>
+        )}
+        {normal.map((provider) => (
+          <ProviderRow
+            key={provider.id}
+            provider={provider}
+            snapshot={dashboard.snapshots[provider.id]}
+            state={dashboard.runtimeStates[provider.id]}
+            reload={reload}
+            t={t}
+          />
+        ))}
       </section>
-      {issues.length > 0 && <section class="issues">
-        <button class="issues-toggle" onClick={() => setIssuesOpen((value) => !value)} aria-expanded={issuesOpen}>▼ Needs attention · {issues.length}</button>
-        {issuesOpen && <div class="issue-list">{issues.map((provider) => <IssueCard key={provider.id} provider={provider} snapshot={dashboard.snapshots[provider.id]} state={dashboard.runtimeStates[provider.id]} reload={reload} />)}</div>}
-      </section>}
+      {issues.length > 0 && (
+        <section class="issues">
+          <button class="issues-toggle" onClick={() => setIssuesOpen((value) => !value)} aria-expanded={issuesOpen}>
+            {t('popup.needsAttention', { count: issues.length })}
+          </button>
+          {issuesOpen && (
+            <div class="issue-list">
+              {issues.map((provider) => (
+                <IssueCard
+                  key={provider.id}
+                  provider={provider}
+                  snapshot={dashboard.snapshots[provider.id]}
+                  state={dashboard.runtimeStates[provider.id]}
+                  reload={reload}
+                  t={t}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       <footer class="popup-footer">
         <button type="button" class="text-button footer-link" onClick={() => {
           void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?report=1'), active: true });

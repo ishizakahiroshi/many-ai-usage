@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="64" height="64" role="img" aria-label="Ollama sample">
+  <!-- Sister of many-ai-cli providerIconHtml (letter badge, rounded rect). Not an official brand mark. -->
+  <rect x="1" y="1" width="14" height="14" rx="3" fill="#faf6ef" stroke="#c4973a" stroke-width="1.5"/>
+  <text x="8" y="8.2" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="700" font-family="system-ui,Segoe UI,sans-serif" fill="#c4973a">O</text>
+</svg>

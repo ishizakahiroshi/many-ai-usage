@@ -1,4 +1,4 @@
-# [様子見] 障害対応記録: Settings の左 provider 一覧が大きく、右詳細と一緒にスクロールする
+# [完了] 障害対応記録: Settings の左 provider 一覧が大きく、右詳細と一緒にスクロールする
 
 ## 症状
 
@@ -43,10 +43,12 @@ Settings を viewport 内に固定し、左の provider 一覧と右の詳細を
 - `.provider-sidebar-list` に `overflow-y: auto` と `overscroll-behavior: contain` を付与
 - provider 行を 6px padding・18px icon・小さめの文字にし、一覧密度を上げる
 - report ボタンは sidebar 下部へ固定し、一覧だけがスクロールするようにする
+- **追記 (2026-07-19 再発)**: 一覧を viewport 高さに伸ばしたあと、`display: grid` の既定 `align-content: stretch` で各行が均等に引き伸ばされ、カードが巨大に見えた。`align-content: start` + `grid-auto-rows: max-content` + `align-self: start` で行高を内容に固定する
 
 ### 3. 右詳細を独立スクロール
 
-- `.main-panel` に `overflow-y: auto` と `overscroll-behavior: contain` を付与
+- `.main-panel` に `height: 100%` / `overflow-y: auto` / `overscroll-behavior: contain` を付与
+- `#app` を flex カラムにして高さチェーンを確実にする
 - 右詳細をスクロールしても、左の provider 一覧位置は変わらない
 
 ## 変更ファイル
@@ -61,13 +63,16 @@ Settings を viewport 内に固定し、左の provider 一覧と右の詳細を
 - `pnpm run typecheck` — 成功
 - `git diff --check` — 成功
 
-実機（様子見・ユーザー確認待ち）:
+実機:
 1. 拡張をリロードして Settings を開く
 2. 右詳細を最下部までスクロールしても、左の provider 一覧位置が変わらないこと
 3. provider 数が多い場合、左一覧だけをスクロールして選択・ドラッグ並べ替えできること
 4. 左下の Report ボタンが一覧スクロールに巻き込まれないこと
 5. 左一覧または右詳細を端までスクロールしても、もう一方のスクロール位置に連鎖しないこと
 6. 900px 以上の画面幅で左右カラムが横並びのまま表示されること
+7. 左一覧の各行が縦に引き伸ばされず、内容高さのまま上寄せになること
+
+確認結果: 2026-07-19 ユーザー実機で OK（独立スクロール + 行の引き伸ばし修正）。
 
 ## 備忘
 

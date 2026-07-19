@@ -26,29 +26,82 @@ export async function initializeStorage(): Promise<void> {
   if (Object.keys(patch).length > 0) await localStorage().set(patch);
 }
 
-export async function applyRegistryProviders(remote: ProviderConfig[]): Promise<{ added: string[]; skipped: string[] }> {
+export type ApplyProvidersResult = { added: string[]; skipped: string[]; replaced: string[] };
+
+/**
+ * Merge remote/sample providers into local storage.
+ * Default: add unknown ids only (never overwrite user teach / Re-teach).
+ * With replaceExisting: overwrite matching ids' url/metrics/mode (opt-in only).
+ */
+export async function applyStarterProviders(
+  remote: ProviderConfig[],
+  options: { replaceExisting?: boolean } = {},
+): Promise<ApplyProvidersResult> {
+  const replaceExisting = options.replaceExisting === true;
   const existingProviders = await getProviders();
-  const existingIds = new Set(existingProviders.map((provider) => provider.id));
-  const missing = remote.filter((provider) => !existingIds.has(provider.id));
-  if (missing.length === 0) {
-    return { added: [], skipped: remote.map((provider) => provider.id) };
+  const existingById = new Map(existingProviders.map((provider) => [provider.id, provider]));
+  const added: string[] = [];
+  const skipped: string[] = [];
+  const replaced: string[] = [];
+  const now = new Date().toISOString();
+  let nextProviders = [...existingProviders];
+  let baseOrder = existingProviders.length;
+
+  for (const remoteProvider of remote) {
+    const existing = existingById.get(remoteProvider.id);
+    if (!existing) {
+      nextProviders.push({ ...remoteProvider, order: baseOrder });
+      baseOrder += 1;
+      added.push(remoteProvider.id);
+      continue;
+    }
+    if (!replaceExisting) {
+      skipped.push(remoteProvider.id);
+      continue;
+    }
+    nextProviders = nextProviders.map((provider) => {
+      if (provider.id !== remoteProvider.id) return provider;
+      return {
+        ...provider,
+        displayName: remoteProvider.displayName,
+        url: remoteProvider.url,
+        urlMatch: remoteProvider.urlMatch,
+        mode: remoteProvider.mode,
+        refreshIntervalMinutes: remoteProvider.refreshIntervalMinutes,
+        metrics: remoteProvider.metrics,
+        // Sample / starter icons hydrate into iconDataUrl; opt-in replace updates them too.
+        ...(remoteProvider.iconDataUrl ? { iconDataUrl: remoteProvider.iconDataUrl } : {}),
+        updatedAt: now,
+      };
+    });
+    replaced.push(remoteProvider.id);
   }
-  const baseOrder = existingProviders.length;
-  const additions = missing.map((provider, index) => ({ ...provider, order: baseOrder + index }));
-  const nextProviders = [...existingProviders, ...additions];
+
+  if (added.length === 0 && replaced.length === 0) {
+    return { added: [], skipped, replaced: [] };
+  }
+
   await localStorage().set({ [PROVIDERS_KEY]: nextProviders });
   const runtimeResult = await localStorage().get(RUNTIME_KEY);
   const runtimeStates = { ...(runtimeResult[RUNTIME_KEY] ?? {}) };
-  for (const sample of additions) {
-    if (!runtimeStates[sample.id]) {
-      runtimeStates[sample.id] = makeRuntimeState(sample.id, 'needs_permission');
+  for (const id of added) {
+    if (!runtimeStates[id]) {
+      runtimeStates[id] = makeRuntimeState(id, 'needs_permission');
+    }
+  }
+  for (const id of replaced) {
+    if (!runtimeStates[id]) {
+      runtimeStates[id] = makeRuntimeState(id, 'needs_permission');
     }
   }
   await localStorage().set({ [RUNTIME_KEY]: runtimeStates });
-  return {
-    added: additions.map((provider) => provider.id),
-    skipped: remote.filter((provider) => existingIds.has(provider.id)).map((provider) => provider.id),
-  };
+  return { added, skipped, replaced };
+}
+
+/** @deprecated Prefer applyStarterProviders — same merge rules without replace. */
+export async function applyRegistryProviders(remote: ProviderConfig[]): Promise<{ added: string[]; skipped: string[] }> {
+  const result = await applyStarterProviders(remote);
+  return { added: result.added, skipped: result.skipped };
 }
 
 export async function getProviders(): Promise<ProviderConfig[]> {

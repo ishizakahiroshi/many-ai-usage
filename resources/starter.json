@@ -1,0 +1,123 @@
+{
+  "schema": "many-ai-usage.starter.v1",
+  "updated": "2026-07-19",
+  "note": "Community starter pack. Not official partner configs. Sample letter-badge icons (sister of many-ai-cli) are linked via iconUrl and fetched once on import — not official logos. Selectors may break when sites redesign — use Re-teach if reads fail. Contains no cookies, tokens, or real usage numbers.",
+  "source": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/starter.json",
+  "providers": [
+    {
+      "id": "sample:claude",
+      "displayName": "Claude",
+      "url": "https://claude.ai/new#settings/usage",
+      "urlMatch": ["https://claude.ai/*"],
+      "mode": "taught",
+      "refreshIntervalMinutes": 15,
+      "verifiedAt": "2026-07-19",
+      "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/claude.svg",
+      "note": "Dogfood-shaped template: open chat SPA then usage sheet (hash). Path /settings/usage may send Free/upgrade flows — prefer this URL. Re-teach if SPA changes.",
+      "metrics": [
+        {
+          "metricId": "claude-session",
+          "label": "Session",
+          "kind": "percent",
+          "unit": "percent",
+          "windowLabel": "5h",
+          "valueAnchor": {
+            "selectors": [],
+            "tagName": "div",
+            "textFingerprint": "d4d45e76",
+            "nearbyLabel": "セッション"
+          },
+          "interpretation": "used_percent",
+          "enabled": true
+        },
+        {
+          "metricId": "claude-weekly",
+          "label": "Weekly all models",
+          "kind": "percent",
+          "unit": "percent",
+          "windowLabel": "1w",
+          "valueAnchor": {
+            "selectors": [],
+            "tagName": "div",
+            "textFingerprint": "698295e3",
+            "nearbyLabel": "週間全モデル"
+          },
+          "interpretation": "used_percent",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "sample:codex",
+      "displayName": "Codex CLI",
+      "url": "https://chatgpt.com/codex/cloud/settings/analytics#usage",
+      "urlMatch": ["https://chatgpt.com/*"],
+      "mode": "taught",
+      "refreshIntervalMinutes": 15,
+      "verifiedAt": "2026-07-19",
+      "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/codex.svg",
+      "note": "Dogfood-shaped template for weekly remaining. Re-teach if SPA changes.",
+      "metrics": [
+        {
+          "metricId": "codex-weekly",
+          "label": "Weekly limit",
+          "kind": "percent",
+          "unit": "percent",
+          "windowLabel": "Weekly",
+          "valueAnchor": {
+            "selectors": [],
+            "tagName": "div",
+            "textFingerprint": "111157f7",
+            "nearbyLabel": "週間利用上限"
+          },
+          "interpretation": "remaining_percent",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "sample:grok",
+      "displayName": "Grok",
+      "url": "https://grok.com/?_s=usage",
+      "urlMatch": ["https://grok.com/*"],
+      "mode": "auto",
+      "refreshIntervalMinutes": 15,
+      "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/grok.svg",
+      "note": "URL tile only until verified teach results are published.",
+      "metrics": []
+    },
+    {
+      "id": "sample:copilot",
+      "displayName": "GitHub Copilot",
+      "url": "https://github.com/settings/billing",
+      "urlMatch": ["https://github.com/settings/*"],
+      "mode": "auto",
+      "refreshIntervalMinutes": 15,
+      "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/copilot.svg",
+      "note": "URL tile only until verified teach results are published.",
+      "metrics": []
+    },
+    {
+      "id": "sample:cursor",
+      "displayName": "Cursor",
+      "url": "https://cursor.com/dashboard",
+      "urlMatch": ["https://cursor.com/*"],
+      "mode": "auto",
+      "refreshIntervalMinutes": 15,
+      "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/cursor.svg",
+      "note": "URL tile only until verified teach results are published.",
+      "metrics": []
+    },
+    {
+      "id": "sample:ollama",
+      "displayName": "Ollama",
+      "url": "https://ollama.com/settings",
+      "urlMatch": ["https://ollama.com/*"],
+      "mode": "auto",
+      "refreshIntervalMinutes": 15,
+      "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/ollama.svg",
+      "note": "URL tile only until verified teach results are published.",
+      "metrics": []
+    }
+  ]
+}

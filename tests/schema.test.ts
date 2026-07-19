@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isStale, makeRuntimeState, parseProvidersRegistryResponse, safeParseProvider, type ProviderConfig } from '../src/shared/schema';
+import {
+  isStale,
+  makeRuntimeState,
+  parseProvidersRegistryResponse,
+  parseStarterPackResponse,
+  safeParseProvider,
+  type ProviderConfig,
+} from '../src/shared/schema';
 
 function provider(): ProviderConfig {
   return {
@@ -83,5 +90,62 @@ describe('remote providers registry', () => {
 
   it('rejects malformed provider data', () => {
     expect(() => parseProvidersRegistryResponse({ ...registry, providers: [{ id: '', displayName: 'Broken', url: 'not-a-url', urlMatch: [] }] })).toThrow();
+  });
+});
+
+describe('starter pack schema', () => {
+  const starter = {
+    schema: 'many-ai-usage.starter.v1',
+    updated: '2026-07-19',
+    note: 'fixture',
+    providers: [
+      {
+        id: 'sample:claude',
+        displayName: 'Claude',
+        url: 'https://claude.example/usage',
+        urlMatch: ['https://claude.example/*'],
+        mode: 'taught',
+        verifiedAt: '2026-07-19',
+        iconUrl: 'https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/claude.svg',
+        metrics: [
+          {
+            metricId: 'session',
+            label: 'Session',
+            kind: 'percent',
+            unit: 'percent',
+            windowLabel: '5h',
+            valueAnchor: { selectors: [], nearbyLabel: 'セッション' },
+            interpretation: 'used_percent',
+            enabled: true,
+          },
+        ],
+      },
+      {
+        id: 'sample:grok',
+        displayName: 'Grok',
+        url: 'https://grok.example/?_s=usage',
+        urlMatch: ['https://grok.example/*'],
+        metrics: [],
+      },
+    ],
+  };
+
+  it('normalizes metrics and collects sample icon URLs separately', () => {
+    const parsed = parseStarterPackResponse(starter, '2026-07-19T00:00:00.000Z');
+    expect(parsed.providers).toHaveLength(2);
+    expect(parsed.providers[0]).toMatchObject({
+      id: 'sample:claude',
+      mode: 'taught',
+      metrics: [{ metricId: 'session', enabled: true }],
+    });
+    expect(parsed.providers[0].iconDataUrl).toBeUndefined();
+    expect(parsed.providers[1]).toMatchObject({ id: 'sample:grok', mode: 'auto', metrics: [] });
+    expect(parsed.sampleIconUrls).toEqual({
+      'sample:claude': 'https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/claude.svg',
+    });
+  });
+
+  it('rejects an unknown starter schema', () => {
+    expect(() => parseStarterPackResponse({ ...starter, schema: 'many-ai-usage.starter.v0' })).toThrow();
   });
 });
