@@ -1,6 +1,6 @@
 {
   "schema": "many-ai-usage.starter.v1",
-  "updated": "2026-07-19",
+  "updated": "2026-07-20",
   "note": "Community starter pack. Not official partner configs. Sample letter-badge icons (sister of many-ai-cli) are linked via iconUrl and fetched once on import — not official logos. Selectors may break when sites redesign — use Re-teach if reads fail. Contains no cookies, tokens, or real usage numbers.",
   "source": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/starter.json",
   "providers": [
@@ -129,6 +129,17 @@
           "enabled": true
         }
       ]
+    },
+    {
+      "id": "sample:opencode",
+      "displayName": "OpenCode",
+      "url": "https://opencode.ai/go",
+      "urlMatch": ["https://opencode.ai/*"],
+      "mode": "auto",
+      "refreshIntervalMinutes": 15,
+      "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/opencode.svg",
+      "note": "Verified 2026-07-20: /go redirects to the user's own workspace usage page after login (no personal ID in this URL itself). URL tile only — taught metrics not yet published.",
+      "metrics": []
     },
     {
       "id": "sample:ollama",

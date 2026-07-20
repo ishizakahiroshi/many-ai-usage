@@ -22,19 +22,32 @@ button:hover { border-color: #9ca3af; background: #f9fafb; }
 .popup-header strong { font-size: 15px; letter-spacing: -.01em; }
 .popup-header .brand span { margin-left: 0; color: var(--muted); font-size: 11px; }
 .header-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-.refresh-all-button { padding: 3px 6px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.header-action-button, .locale-select {
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--muted);
+  font: 650 11px/1 system-ui, -apple-system, Segoe UI, sans-serif;
+}
+.header-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+.header-action-button:hover:not(:disabled), .header-action-button:focus-visible {
+  border-color: #9ca3af;
+  background: #f9fafb;
+  color: var(--ink);
+  outline: none;
+}
 .refresh-all-button:disabled { cursor: wait; opacity: .65; }
 .locale-select-wrap { display: inline-flex; align-items: center; }
 .locale-select {
   max-width: 7.5rem;
-  padding: 3px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--soft);
-  color: var(--muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 650;
+  padding: 0 26px 0 9px;
   cursor: pointer;
 }
 .locale-select:hover, .locale-select:focus {
@@ -54,7 +67,6 @@ button:hover { border-color: #9ca3af; background: #f9fafb; }
   border: 0;
 }
 .text-button { border: 0; padding: 4px; color: var(--muted); background: transparent; }
-.report-header-button { white-space: nowrap; font-size: 11px; }
 .provider-list { padding: 8px 12px; }
 .provider-row { border-bottom: 1px solid var(--line); }
 .provider-row.expanded { background: #fff7ed; }
