@@ -71,6 +71,17 @@ function rectContainsPoint(rect: DOMRect, x: number, y: number, pad = 2): boolea
  * Host stays pointer-events:none (only the panel is interactive), so we do not need
  * showModal inert workarounds — modal dialogs made Grok's sheet unhittable.
  */
+/**
+ * Reject elements a hostile/redesigned page could hide from view (opacity:0, visibility:hidden,
+ * display:none) yet still make hit-testable, so teach can't be pointed at an invisible decoy
+ * that sits exactly over the real, visible value the user thinks they clicked.
+ */
+function isVisibleForHitTest(element: Element): boolean {
+  if (!(element instanceof HTMLElement) && !(element instanceof SVGElement)) return true;
+  const style = getComputedStyle(element);
+  return style.opacity !== '0' && style.visibility !== 'hidden' && style.display !== 'none';
+}
+
 function hitStackAtPoint(x: number, y: number): Element[] {
   if (!pickerHost) return [];
   // Belt-and-suspenders: never let our chrome intercept hit-testing.
@@ -84,7 +95,7 @@ function hitStackAtPoint(x: number, y: number): Element[] {
       if (!stack.includes(el)) stack.push(el);
     }
   }
-  return stack.filter((element) => element && !isPickerChrome(element));
+  return stack.filter((element) => element && !isPickerChrome(element) && isVisibleForHitTest(element));
 }
 
 /** Hit-test the page under the full-screen picker host (temporarily disables host pointer events). */
@@ -103,6 +114,7 @@ function candidatesAtPoint(x: number, y: number): Element[] {
   const push = (el: Element | null | undefined) => {
     if (!el || seen.has(el) || isPickerChrome(el)) return;
     if (el === document.body || el === document.documentElement) return;
+    if (!isVisibleForHitTest(el)) return;
     seen.add(el);
     out.push(el);
   };
@@ -900,8 +912,12 @@ async function panelClick(event: Event): Promise<void> {
   const metricId = button.dataset.metricId;
   if (!metricId) return;
   if (action === 'remove') {
-    const response = await chrome.runtime.sendMessage({ type: 'REMOVE_METRIC', providerId: activeProviderId, metricId }) as { metrics?: TaughtMetric[] };
-    savedMetrics = response.metrics ?? savedMetrics.filter((metric) => metric.metricId !== metricId);
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'REMOVE_METRIC', providerId: activeProviderId, metricId }) as { metrics?: TaughtMetric[] };
+      savedMetrics = response.metrics ?? savedMetrics.filter((metric) => metric.metricId !== metricId);
+    } catch {
+      setStatusHint('Could not remove this metric. Try again.');
+    }
     renderPanel();
     return;
   }
@@ -914,8 +930,12 @@ async function panelClick(event: Event): Promise<void> {
     const input = panel?.querySelector<HTMLInputElement>(`input[data-rename-input][data-metric-id="${cssEscape(metricId)}"]`);
     const label = input?.value.trim().slice(0, 80) ?? '';
     if (!label) return;
-    const response = await chrome.runtime.sendMessage({ type: 'RENAME_METRIC', providerId: activeProviderId, metricId, label }) as { metrics?: TaughtMetric[] };
-    savedMetrics = response.metrics ?? savedMetrics.map((metric) => metric.metricId === metricId ? { ...metric, label, windowLabel: label } : metric);
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'RENAME_METRIC', providerId: activeProviderId, metricId, label }) as { metrics?: TaughtMetric[] };
+      savedMetrics = response.metrics ?? savedMetrics.map((metric) => metric.metricId === metricId ? { ...metric, label, windowLabel: label } : metric);
+    } catch {
+      setStatusHint('Could not rename this metric. Try again.');
+    }
     renderPanel();
   }
 }

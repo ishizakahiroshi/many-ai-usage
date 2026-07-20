@@ -1,7 +1,7 @@
-# [実行中] popup D&D 並べ替え（options と同経路）
+# [完了] popup D&D 並べ替え（options と同経路）
 
-> ローカル実装: 2026-07-19(日) · typecheck / tests/i18n / tests/storage 緑。unpacked 手動確認は未完了。
-> このファイルを渡された AI は、残 C（C2 以降）をそのまま実行する。既に `fix` の C は再実装しない。
+> ローカル実装: 2026-07-19(日) · typecheck / tests/i18n / tests/storage 緑。C1（`src/popup/main.tsx` の drag-handle, `draggedId` state, `.provider-row.dragging`）実装確認済み。
+> 2026-07-20: unpacked 実機確認はリリース前の動作確認フェーズで実施。
 
 ## context配分
 

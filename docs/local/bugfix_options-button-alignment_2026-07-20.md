@@ -1,4 +1,6 @@
-# [様子見] 障害対応記録: Settings の操作ボタン幅・高さが不揃い
+# [完了] 障害対応記録: Settings の操作ボタン幅・高さが不揃い
+
+> 2026-07-20: `src/options/styles.css` の `.teach-panel-actions`（column/stretch）、`.icon-actions`（align-items: center）実装確認済み。
 
 ## 症状
 

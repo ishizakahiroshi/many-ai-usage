@@ -1,15 +1,16 @@
 ---
 type: plan
-status: in-progress
+status: done
 tags: [implementation, mvp, pivot, teach-mode, browser-extension]
 owner: ishizakahiroshi
 review_status: draft
 related: [plan_v0.1.0-mvp.md, reference_study-synthesis.md, review_v0.1.0-mvp-open-topics_2026-07-14_decisions.md]
-last_reviewed: 2026-07-14
-due: 2026-07-21
+last_reviewed: 2026-07-20
 ---
 
-# [進行中] v0.1.0 MVP ピボット: teach-mode 前倒し
+# [完了] v0.1.0 MVP ピボット: teach-mode 前倒し
+
+> 2026-07-20: teach-mode 主 pipeline は `src/content/teach/{selector,extract,picker,read,reset}.ts`, `src/background/index.ts` で実装確認済み。
 
 > 最終更新: 2026-07-14
 > 前提: `docs/local/plan_v0.1.0-mvp.md` を親 plan として維持し、本 plan は「主 pipeline を auto detector から teach-mode に付け替える」差分だけを記述する

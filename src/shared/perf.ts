@@ -41,12 +41,3 @@ export function perfLog(label: string, startedAt: number, extra?: Record<string,
   console.info(`[many-ai-usage:perf] ${label}`, payload);
   return ms;
 }
-
-export async function perfAsync<T>(label: string, run: () => Promise<T>, extra?: Record<string, unknown>, thresholdMs = DEFAULT_THRESHOLD_MS): Promise<T> {
-  const startedAt = perfNow();
-  try {
-    return await run();
-  } finally {
-    perfLog(label, startedAt, extra, thresholdMs);
-  }
-}

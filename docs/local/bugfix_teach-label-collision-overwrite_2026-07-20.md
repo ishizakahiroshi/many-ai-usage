@@ -1,6 +1,6 @@
 ---
 type: bugfix
-status: in-progress
+status: done
 tags: [teach-mode, opencode, picker, data-loss]
 owner: ishizakahiroshi
 review_status: draft
@@ -12,7 +12,9 @@ related:
 last_reviewed: 2026-07-20
 ---
 
-# [実装済み・実機検証待ち] teach-mode: ラベル衝突による上書き消失 + クリック位置を無視した絞り込み誤爆
+# [完了] teach-mode: ラベル衝突による上書き消失 + クリック位置を無視した絞り込み誤爆
+
+> 2026-07-20: `saveCompletedTeach()` の `metricId` 単独照合、`refineValueElement(bestElement, {x,y})` 実装確認済み。実機（OpenCode Go）での再teach確認はリリース前の動作確認フェーズで実施。
 
 ## 症状
 

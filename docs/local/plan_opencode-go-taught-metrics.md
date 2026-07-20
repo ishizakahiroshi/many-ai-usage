@@ -9,7 +9,7 @@ related:
   - resources/starter.json
   - src/shared/samples.ts
 last_reviewed: 2026-07-20
-due: 2026-07-27
+due: 2026-07-21
 ---
 
 # [計画] opencode-go-taught-metrics

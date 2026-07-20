@@ -108,13 +108,15 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
     let resolveVia: 'selector' | 'fingerprint' | 'label' | 'headline' | 'none' = resolved.path;
     let headlineFallback = false;
     let extracted = element ? extractValue(element) : null;
+    // Only the resolved evidence (not the taught label) decides "this looks like a legend
+    // chip": a metric named e.g. "API credits" on an unrelated provider must not be discarded
+    // purely for its label containing one of these common words when resolution succeeded.
     const preferHeadline = !element
       || extracted?.value == null
-      || labelLooksLikeBreakdown(taught.label)
       || (extracted ? looksLikeBreakdownChip(extracted.evidence) : false);
     if (preferHeadline) {
       // Legend chips (Grok Build / チャット / API) are not the SuperGrok total the user wants.
-      const headline = findUsageHeadline(document, usedHeadlineElements);
+      const headline = findUsageHeadline(document, usedHeadlineElements, [taught.label, taught.windowLabel, taught.valueAnchor?.nearbyLabel]);
       if (headline) {
         const headlineExtracted = extractValue(headline);
         if (headlineExtracted.value != null) {

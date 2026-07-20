@@ -157,7 +157,7 @@ export function findByFingerprint(root: Document, fingerprint: AnchorFingerprint
  * Matches compact nodes whose stable text still includes the taught label / nearby label.
  */
 export function findByLabelHint(
-  root: Document,
+  root: Document | Element,
   hints: Array<string | undefined | null>,
   preferredTag?: string,
   exclude?: ReadonlySet<Element>,
@@ -183,12 +183,7 @@ export function findByLabelHint(
   return hits.sort((left, right) => (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0))[0] ?? null;
 }
 
-/**
- * Last-resort recovery for usage dashboards (Grok SuperGrok card, etc.):
- * pick a compact node that looks like a page total ("52% 使用済" / "85% 残り").
- * Prefer nodes that carry both a percent and the summary word (not bare "使用済" labels).
- */
-export function findUsageHeadline(root: Document, exclude?: ReadonlySet<Element>): Element | null {
+function scanHeadline(root: Document | Element, exclude?: ReadonlySet<Element>): Element | null {
   const scored: Array<{ el: Element; score: number }> = [];
   walkElements(root, MAX_FINGERPRINT_SCAN, (element) => {
     if (exclude?.has(element)) return true;
@@ -218,6 +213,60 @@ export function findUsageHeadline(root: Document, exclude?: ReadonlySet<Element>
   const remaining = findByLabelHint(root, ['残り', 'remaining'], undefined, exclude);
   if (remaining) return remaining;
   return findByLabelHint(root, ['used', 'usage'], undefined, exclude);
+}
+
+/**
+ * Find a container near where the taught metric used to live, by locating any element whose
+ * text still contains the taught label / nearby label and walking a few ancestors up. Bounded
+ * so a page redesign or hostile page can't have an arbitrary unrelated node picked up as
+ * "the headline" from anywhere in the document (see findUsageHeadline).
+ */
+function findAnchorContainer(root: Document | Element, hints: Array<string | undefined | null>): Element | null {
+  const needles = hints
+    .map((hint) => stableText((hint ?? '').slice(0, 40)))
+    .filter((hint) => hint.length >= 2);
+  if (needles.length === 0) return null;
+  let match: Element | null = null;
+  walkElements(root, MAX_FINGERPRINT_SCAN, (element) => {
+    if (match) return false;
+    const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (text.length === 0 || text.length > 200) return true;
+    const stable = stableText(text);
+    if (!needles.some((needle) => stable.includes(needle))) return true;
+    match = element;
+    return false;
+  });
+  if (!match) return null;
+  let container: Element = match;
+  for (let depth = 0; depth < 4 && container.parentElement; depth += 1) {
+    container = container.parentElement;
+  }
+  return container;
+}
+
+/**
+ * Last-resort recovery for usage dashboards (Grok SuperGrok card, etc.):
+ * pick a compact node that looks like a page total ("52% 使用済" / "85% 残り").
+ * Prefer nodes that carry both a percent and the summary word (not bare "使用済" labels).
+ *
+ * When `nearHints` (the taught metric's label / nearby label) resolves to a still-present
+ * anchor container, scan that bounded subtree first so an unrelated or attacker-controlled
+ * node elsewhere on the page isn't preferred over one actually near where the metric lived.
+ * Falls back to a full-document scan when no such container can be found (unchanged behavior).
+ */
+export function findUsageHeadline(
+  root: Document,
+  exclude?: ReadonlySet<Element>,
+  nearHints?: Array<string | undefined | null>,
+): Element | null {
+  if (nearHints && nearHints.length > 0) {
+    const container = findAnchorContainer(root, nearHints);
+    if (container) {
+      const scoped = scanHeadline(container, exclude);
+      if (scoped) return scoped;
+    }
+  }
+  return scanHeadline(root, exclude);
 }
 
 export function buildCssPath(element: Element, root: Document = element.ownerDocument): string {

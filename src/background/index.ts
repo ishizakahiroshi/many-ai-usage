@@ -670,8 +670,12 @@ function snapshotFromLiveReads(provider: ProviderConfig, session: TeachSession, 
     const live = session.liveReads[taught.metricId];
     if (!live) continue;
     const interpretation = taught.interpretation ?? 'unknown';
-    const used = interpretation === 'used_percent' || interpretation === 'used_total' ? live.used ?? live.value : live.used;
-    const remaining = interpretation === 'remaining_percent' || interpretation === 'remaining_total' || interpretation === 'absolute_value' || taught.unit === 'percent'
+    const isUsedInterpretation = interpretation === 'used_percent' || interpretation === 'used_total';
+    const used = isUsedInterpretation ? live.used ?? live.value : live.used;
+    // Do not also fold live.value into remaining for a used_* interpretation: that duplicated
+    // "42% used" into "42% remaining" instead of leaving remaining unset.
+    const remaining = !isUsedInterpretation
+      && (interpretation === 'remaining_percent' || interpretation === 'remaining_total' || interpretation === 'absolute_value' || taught.unit === 'percent')
       ? live.remaining ?? live.value
       : live.remaining;
     metrics.push({
