@@ -160,6 +160,7 @@ export function findByLabelHint(
   root: Document,
   hints: Array<string | undefined | null>,
   preferredTag?: string,
+  exclude?: ReadonlySet<Element>,
 ): Element | null {
   const needles = hints
     .map((hint) => stableText((hint ?? '').slice(0, 40)))
@@ -167,6 +168,7 @@ export function findByLabelHint(
   if (needles.length === 0) return null;
   const hits: Element[] = [];
   walkElements(root, MAX_FINGERPRINT_SCAN, (element) => {
+    if (exclude?.has(element)) return true;
     if (preferredTag && element.tagName.toLowerCase() !== preferredTag.toLowerCase()) return true;
     const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (text.length === 0 || text.length > 100) return true;
@@ -186,9 +188,10 @@ export function findByLabelHint(
  * pick a compact node that looks like a page total ("52% 使用済" / "85% 残り").
  * Prefer nodes that carry both a percent and the summary word (not bare "使用済" labels).
  */
-export function findUsageHeadline(root: Document): Element | null {
+export function findUsageHeadline(root: Document, exclude?: ReadonlySet<Element>): Element | null {
   const scored: Array<{ el: Element; score: number }> = [];
   walkElements(root, MAX_FINGERPRINT_SCAN, (element) => {
+    if (exclude?.has(element)) return true;
     if (element.childElementCount > 8) return true;
     const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (text.length === 0 || text.length > 80) return true;
@@ -210,11 +213,11 @@ export function findUsageHeadline(root: Document): Element | null {
     scored.sort((a, b) => b.score - a.score);
     return scored[0]!.el;
   }
-  const used = findByLabelHint(root, ['使用済', '使用済み']);
+  const used = findByLabelHint(root, ['使用済', '使用済み'], undefined, exclude);
   if (used) return used;
-  const remaining = findByLabelHint(root, ['残り', 'remaining']);
+  const remaining = findByLabelHint(root, ['残り', 'remaining'], undefined, exclude);
   if (remaining) return remaining;
-  return findByLabelHint(root, ['used', 'usage']);
+  return findByLabelHint(root, ['used', 'usage'], undefined, exclude);
 }
 
 export function buildCssPath(element: Element, root: Document = element.ownerDocument): string {

@@ -319,6 +319,61 @@ describe('teach-mode pure functions', () => {
     expect(snapshot.metrics[0].evidence.semanticSignals).toContain('headline-fallback');
   });
 
+  it('resolves distinct taught metrics to distinct headline nodes instead of collapsing onto one', () => {
+    document.body.innerHTML = `
+      <section>
+        <div>Session</div>
+        <div id="session">1% 使用済み</div>
+      </section>
+      <section>
+        <div>All models</div>
+        <div id="weekly">79% 使用済み</div>
+      </section>`;
+    const brokenAnchor = {
+      selectors: ['#does-not-exist'],
+      tagName: 'span',
+      textFingerprint: 'deadbeef',
+      nearbyLabel: 'gone',
+    };
+    const provider: ProviderConfig = {
+      schema: 'many-ai-usage.provider.v1',
+      id: 'fixture:headline-collision',
+      displayName: 'Claude',
+      url: 'https://claude.example/?_s=usage',
+      urlMatch: [],
+      mode: 'taught',
+      displayEnabled: true,
+      refreshIntervalMinutes: 15,
+      metrics: [
+        {
+          metricId: 'session',
+          label: '5h',
+          kind: 'percent',
+          unit: 'percent',
+          valueAnchor: brokenAnchor,
+          interpretation: 'used_percent',
+          enabled: true,
+        },
+        {
+          metricId: 'weekly',
+          label: '1w',
+          kind: 'percent',
+          unit: 'percent',
+          valueAnchor: brokenAnchor,
+          interpretation: 'used_percent',
+          enabled: true,
+        },
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: 0,
+    };
+    const snapshot = readTaught(document, provider);
+    expect(snapshot.metrics).toHaveLength(2);
+    expect(snapshot.metrics[0].used).not.toBe(snapshot.metrics[1].used);
+    expect([snapshot.metrics[0].used, snapshot.metrics[1].used].sort()).toEqual([1, 79]);
+  });
+
   it('keeps the picker open while a metric is staged, then completes from the panel', async () => {
     document.body.innerHTML = '<section><h2>Weekly quota</h2><p id="weekly">62% remaining</p><h2>Credits</h2><p id="credits">18 credits remaining</p></section>';
     mockHitTarget(() => document.querySelector('#weekly'));
