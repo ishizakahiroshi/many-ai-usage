@@ -49,24 +49,26 @@ https://opencode.ai/workspace/<wrk_PERSONAL>/go
 4. **metrics だけ共有しても再読取先 URL が要る**  
    teach の selector は他ユーザーの同じ UI で動く可能性はあるが、**最初に開く URL が個人依存**なので starter 一発 UX に乗らない。
 
-## 3. 決定済み方針（2026-07-19）
+## 3. 決定済み方針（2026-07-19 → 2026-07-20 更新）
+
+**2026-07-20 追記: 案C を実機確認済み。** `https://opencode.ai/go` にログイン済みブラウザでアクセスすると、自分の `workspace/wrk_…/go` へ自動 redirect され、利用量ページがそのまま表示される（スクショで確認）。これにより `url: "https://opencode.ai/go"` は **個人 ID を含まない・全ユーザー共通の安全な entry URL** として starter.json に登録可能と判断する。D-OC1 はこの観測により見直す。
 
 | # | 決定 | 理由 |
 |---|------|------|
-| D-OC1 | **`resources/starter.json` に OpenCode / OpenCode Go を載せない**（現状・v0.1 相当） | 固定の安全な `url` が無い。載せると壊れたタイルか個人 ID 漏えいのどちらかになる |
-| D-OC2 | **「urlMatch のみ・URL タイル無し」は今やらない** | schema 未対応。対応するなら別 plan（optional url + 取込時にユーザーが自分の `/go` を貼る UX） |
-| D-OC3 | **dogfood はローカル（ブラウザ storage）のみ** | 著者の `wrk_…` 付き provider は commit しない。track JSON を docs に残す場合も ID・メール・実 % を除去 |
-| D-OC4 | **ドキュメントにはパターンと注意だけ** | 本ファイルが注意の正本。README / store 文面への OpenCode 名前列挙は必須ではない（starter に無いため） |
+| D-OC1 | ~~`resources/starter.json` に OpenCode / OpenCode Go を載せない~~ **→ 撤回（2026-07-20）**。`url: https://opencode.ai/go` + `urlMatch: ["https://opencode.ai/*"]` で URL タイルとして登録可 | 案C 実機確認により固定 entry URL が存在すると判明。redirect 後の実ページ(wrk 付き)は urlMatch で吸収される |
+| D-OC2 | **「urlMatch のみ・URL タイル無し」は今やらない** | 引き続き有効（schema 未対応）。ただし OpenCode は `url` に `/go` を書けるので本制約自体が不要になった |
+| D-OC3 | **dogfood はローカル（ブラウザ storage）のみ** | 著者の `wrk_…` 付き provider（手動追加した実 entry）は引き続き commit しない。track JSON を docs に残す場合も ID・メール・実 % を除去 |
+| D-OC4 | **starter への taught metrics 追加は別途 teach-mode 実施後** | URL タイルとしての登録(mode: auto, metrics: [])のみ 2026-07-20 に実施。selector/fingerprint は未実施のため追加しない |
 
 ### 将来候補（未決・着手条件付き）
 
 | 案 | 内容 | 着手条件 |
 |----|------|----------|
-| A | ユーザーが「OpenCode を追加」→ 自分の `/go` URL を 1 回貼る → teach or 共有 metrics テンプレ適用 | UX 設計 + 任意で metrics テンプレ |
-| B | `url` optional + `urlMatch` only の template provider | schema / merge / Track 導線の変更 plan |
-| C | `https://opencode.ai/` 等がログイン後に自分の workspace へ redirect するか検証し、entry URL に使えるか判断 | **実機 1 回の観測**が必要（未確認） |
+| A | ユーザーが「OpenCode を追加」→ 自分の `/go` URL を 1 回貼る → teach or 共有 metrics テンプレ適用 | 不要になった（D-OC1 撤回により `/go` を共通 entry として直接 starter 登録済み） |
+| B | `url` optional + `urlMatch` only の template provider | 不要（同上） |
+| C | `https://opencode.ai/go` がログイン後に自分の workspace へ redirect するか検証 | **確認済み（2026-07-20）**。redirect 先は `/workspace/wrk_…/go`、ページはローリング/週間/月間の3利用量を表示 |
 
-**今やらない:** starter に偽の `wrk_` を入れる・「URL タイル無し」を schema なしで実装する。
+**今後やる（任意）:** starter.json の OpenCode entry に対して実際に teach-mode を実施し、taught metrics（ローリング/週間/月間利用量）を追加する。selector は個人 workspace で teach しても DOM 構造自体は共通ページテンプレのはずだが、追加前に実 teach で fingerprint を採取すること。
 
 ## 4. many-ai-usage での正しい使い方（ユーザー / dogfood）
 
@@ -133,7 +135,9 @@ https://opencode.ai/workspace/<wrk_PERSONAL>/go
 
 ### dogfood メモ（2026-07-19）
 
-popup スクショ: OpenCode に「ローリング利用量 0%」「月間利用量 0%」。バー表示まで到達。starter へは載せない方針（D-OC1）を維持。
+popup スクショ: OpenCode に「ローリング利用量 0%」「月間利用量 0%」。バー表示まで到達。2026-07-20: `opencode.ai/go` の redirect 確認により starter 登録（URL タイルのみ）に方針転換。
+
+**2026-07-20 追記:** `opencode.ai/go` へログイン済みでアクセス → 自分の `workspace/wrk_…/go` へ redirect → ローリング/週間/月間利用量ページが表示されることを実機確認。`/go` 自体には個人 ID が含まれないため、starter.json の `url` に安全に使える。
 
 ## 6. 他プロバイダとの対比（starter 載せやすさ）
 
@@ -142,7 +146,7 @@ popup スクショ: OpenCode に「ローリング利用量 0%」「月間利用
 | Claude | hash SPA だが path/hash は共有可 | 向き（taught 済みテンプレ可） |
 | Codex | 共有 path 可 | 向き |
 | Cursor / Ollama 等 | 共有 path 可 | 向き or URL タイル |
-| **OpenCode Go** | **path に wrk** | **不向き（本方針）** |
+| **OpenCode Go** | entry (`/go`) は共通、redirect 先のみ wrk 付き | **向き（URL タイル。2026-07-20 確認）** |
 
 ## 7. 関連コード・ファイル
 
@@ -150,15 +154,16 @@ popup スクショ: OpenCode に「ローリング利用量 0%」「月間利用
 |------|------|
 | `src/shared/schema.ts` | `url` 必須・TaughtMetric 形 |
 | `src/shared/url.ts` | `urlMatch` / path prefix マッチ |
-| `resources/starter.json` | コミュニティ starter 正本（OpenCode **無し**） |
+| `resources/starter.json` | コミュニティ starter 正本（OpenCode: URL タイルのみ登録済み・2026-07-20） |
+| `resources/provider-sample-icons/opencode.svg` | OpenCode サンプルアイコン（2026-07-20 追加） |
 | `docs/local/plan_starter-pack-import.md` | スターター全体計画。判断ログに D-OC* を要約転記 |
 
-## 8. 変更時のチェック
+## 8. 変更時のチェック（taught metrics を追加する場合）
 
-OpenCode を starter に載せたくなったら、先に次を埋める:
+現状は URL タイルのみ（`mode: "auto"`, `metrics: []`）。taught metrics を載せたくなったら、先に次を埋める:
 
-1. 全ユーザー共通の entry URL があるか（案 C の実測）
-2. 無いなら案 A/B のどちらで「自分の URL を 1 回教える」UX を取るか
-3. teach テンプレを載せるなら **url フィールドに何を書くか** を schema と UI で定義
+1. 実際に teach-mode を実施し、ローリング/週間/月間の selector・textFingerprint を採取する
+2. 採取結果から `wrk_…` 等の個人文字列を除去し、構造のみ本ファイルまたは starter.json に反映する
+3. 複数アカウントで DOM 構造が共通か（多言語 UI 差分含め）確認する
 
-上記なしに `starter.json` へ追加しない。
+上記なしに taught metrics を `starter.json` へ追加しない。

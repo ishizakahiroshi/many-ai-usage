@@ -415,7 +415,7 @@ function PopupApp() {
         </div>
         <div class="header-actions">
           <button
-            class="refresh-all-button"
+            class="header-action-button refresh-all-button"
             type="button"
             disabled={refreshingAll}
             onClick={refreshAll}
@@ -436,12 +436,12 @@ function PopupApp() {
           </label>
           <button
             type="button"
-            class="text-button report-header-button"
+            class="header-action-button"
             onClick={() => {
               void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?report=1'), active: true });
             }}
           >{t('report.link')}</button>
-          <button class="text-button" onClick={() => openOptions()}>⚙ {t('common.options')}</button>
+          <button type="button" class="header-action-button" onClick={() => openOptions()}>⚙ {t('common.options')}</button>
         </div>
       </header>
       <section class="provider-list" aria-label="Usage providers">

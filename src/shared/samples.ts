@@ -29,6 +29,7 @@ export const SAMPLE_PROVIDER_IDS = [
   'sample:copilot',
   'sample:cursor',
   'sample:ollama',
+  'sample:opencode',
 ] as const;
 
 export function isSampleProviderId(id: string): boolean {

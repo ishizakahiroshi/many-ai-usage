@@ -74,7 +74,7 @@ describe('sample icon URL policy', () => {
 });
 
 describe('sample provider fetch', () => {
-  it('fetches the fixed registry URL and returns six validated providers', async () => {
+  it('fetches the fixed registry URL and returns all validated providers', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => registry });
     vi.stubGlobal('fetch', fetchMock);
     const providers = await fetchProvidersRegistry();

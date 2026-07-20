@@ -288,6 +288,66 @@ describe('background continuous teach sessions', () => {
     expect(sendTabMessage).toHaveBeenCalledWith(5, { type: 'CAPTURE_NOW' });
   });
 
+  it('never redirects an ordinary matching chat tab during automatic capture', async () => {
+    state.providers[0] = {
+      ...provider(),
+      urlMatch: ['https://example.test/*'],
+    };
+    getTab.mockImplementation(async (tabId: number) => ({
+      id: tabId,
+      url: 'https://example.test/chat',
+      status: 'complete',
+    }));
+    updateTab.mockClear();
+    sendTabMessage.mockClear();
+
+    updated?.(55, { status: 'complete' }, { id: 55, url: 'https://example.test/chat' } as chrome.tabs.Tab);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(updateTab).not.toHaveBeenCalled();
+    expect(sendTabMessage).not.toHaveBeenCalled();
+  });
+
+  it('uses a background usage tab instead of repurposing a matching chat tab for popup refresh', async () => {
+    state.providers[0] = {
+      ...provider(),
+      urlMatch: ['https://example.test/*'],
+    };
+    (chrome.tabs.query as any) = vi.fn(async () => [{ id: 5, url: 'https://example.test/chat' }]);
+    createTab.mockImplementation(async () => ({ id: 99, url: 'https://example.test/usage', status: 'complete' }));
+    getTab.mockImplementation(async (tabId: number) => ({
+      id: tabId,
+      url: tabId === 99 ? 'https://example.test/usage' : 'https://example.test/chat',
+      status: 'complete',
+    }));
+    sendTabMessage.mockImplementation(async (tabId: number, message: { type: string }) => {
+      if (message.type === 'CAPTURE_NOW') {
+        await background.handleMessage({
+          type: 'CAPTURE_RESULT',
+          providerId: 'fixture:continuous',
+          snapshot: {
+            providerId: 'fixture:continuous',
+            displayName: 'Synthetic AI',
+            capturedAt: new Date().toISOString(),
+            source: 'user_taught',
+            status: 'ok',
+            metrics: [],
+            warningReason: null,
+            lastFailureReason: null,
+          },
+        }, { tab: { id: tabId } } as chrome.runtime.MessageSender);
+      }
+      return { ok: true };
+    });
+    updateTab.mockClear();
+
+    const result = await background.handleMessage({ type: 'REFRESH_DASHBOARD' });
+
+    expect(result).toEqual({ refreshed: 1, skipped: 0, timedOut: 0 });
+    expect(createTab).toHaveBeenCalledWith({ url: 'https://example.test/usage', active: false });
+    expect(updateTab).not.toHaveBeenCalledWith(5, expect.objectContaining({ url: 'https://example.test/usage' }));
+  });
+
   it('opens options by re-navigating an existing tab (zombie after extension reload)', async () => {
     const create = createTab;
     create.mockClear();

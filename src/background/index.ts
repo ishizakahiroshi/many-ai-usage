@@ -266,13 +266,29 @@ async function ensureTabOnProviderUsage(provider: ProviderConfig, tabId: number,
   }
 }
 
-async function injectCapture(tabId: number, provider: ProviderConfig, force = false, background = false): Promise<boolean> {
+/**
+ * Inject a capture only when the tab is already on the provider's registered usage entry.
+ * Navigation is reserved for explicit user actions (Refresh / Teach); a broad urlMatch such
+ * as chatgpt.com/* must never turn an ordinary chat/history tab into the usage page.
+ */
+async function injectCapture(
+  tabId: number,
+  provider: ProviderConfig,
+  force = false,
+  background = false,
+  navigateToUsage = false,
+): Promise<boolean> {
   const key = `${tabId}:${provider.id}`;
   if (injectionInFlight.has(key)) return false;
   injectionInFlight.add(key);
   try {
     if (!(await hasPermission(provider))) return false;
-    if (!(await ensureTabOnProviderUsage(provider, tabId, background))) return false;
+    if (navigateToUsage) {
+      if (!(await ensureTabOnProviderUsage(provider, tabId, background))) return false;
+    } else {
+      const tab = await chrome.tabs.get(tabId);
+      if (!isOnProviderUsageEntry(provider, tab.url)) return false;
+    }
     // Re-executing content.js creates a new isolate that used to delete the open picker host.
     if (!(await ensureContentScript(tabId))) return false;
     if (force) {
@@ -382,12 +398,20 @@ async function refreshProvider(providerId: string, background = false): Promise<
   const provider = await getProvider(providerId);
   if (!provider) return { started: false };
   const tab = await findMatchingTab(provider);
-  if (tab?.id != null) {
+  const existingIsUsageEntry = tab?.id != null && isOnProviderUsageEntry(provider, tab.url);
+  // A popup-triggered refresh is automatic.  It must not repurpose a user's ordinary chat
+  // tab simply because its broad urlMatch happens to include the provider's host.
+  if (tab?.id != null && (existingIsUsageEntry || !background)) {
     const pending = beginRefresh(providerId, tab.id, background, false);
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_NOW' });
-    } catch {
-      await injectCapture(tab.id, provider, true, background);
+    if (!existingIsUsageEntry) {
+      // Refresh is an explicit action, so it may move a matching chat tab to its usage entry.
+      await injectCapture(tab.id, provider, true, background, true);
+    } else {
+      try {
+        await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_NOW' });
+      } catch {
+        await injectCapture(tab.id, provider, true, background);
+      }
     }
     return { started: true, tabId: tab.id, completion: pending.completion };
   }
