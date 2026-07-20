@@ -313,7 +313,7 @@ function bestExtractAtPoint(x: number, y: number): { element: Element | null; ex
     && !isCompactUsageHit(bestElement, best)
     && (bestArea > 48_000 || bestElement.childElementCount > 4);
   if (shouldRefine) {
-    const refined = refineValueElement(bestElement);
+    const refined = refineValueElement(bestElement, { x, y });
     if (refined !== bestElement) {
       const refinedExtract = extractValue(refined);
       if (refinedExtract.value != null) {
@@ -569,6 +569,7 @@ function scoreUsageCandidate(
   extracted: ExtractedValue,
   root: Element,
   peers: Array<{ node: Element; extracted: ExtractedValue }>,
+  pointer?: { x: number; y: number },
 ): number {
   const text = extracted.evidence.replace(/\s+/g, ' ').trim();
   const rounded = String(Math.round(extracted.value!));
@@ -600,6 +601,14 @@ function scoreUsageCandidate(
   // Prefer leaf-ish nodes (flex row → value span) when text scores tie.
   score += node.childElementCount === 0 ? 8 : 0;
   score += layoutBoost(node, root);
+  // Click-time refine must honor the pointer (same idea as scoreHoverCandidate).
+  // Without this, a wide multi-column root can pick a sibling column's leaf
+  // just because its text looks more "usage-like" than the node under the cursor.
+  if (pointer) {
+    const rect = node.getBoundingClientRect();
+    if (rectContainsPoint(rect, pointer.x, pointer.y, 6)) score += 50;
+    else if (!isLayoutUnknown(rect)) score -= 30;
+  }
   return score;
 }
 
@@ -610,17 +619,24 @@ function isPreferredUsageNode(node: Element, root: Element): boolean {
 }
 
 /** Prefer the deepest, most usage-like node (avoids teaching whole flex rows or bare labels like "5h"). */
-export function refineValueElement(element: Element): Element {
+export function refineValueElement(element: Element, pointer?: { x: number; y: number }): Element {
   const startedAt = perfNow();
   const nodes = collectRefineCandidates(element);
   // When compact usage leaves exist, skip extractValue on chat-message fallbacks (freeze source).
-  const preferred = nodes.filter((node) => isPreferredUsageNode(node, element));
+  // When the clicked region contains compact value leaves, do not let the
+  // region itself compete with them. A wide multi-column container also
+  // contains the pointer, but it is never a more precise anchor than its
+  // visible value chip.
+  const preferred = nodes.filter((node) => node !== element && isPreferredUsageNode(node, element));
   const extractPool = (preferred.length > 0 ? preferred : nodes).filter((node) => safeToExtractValue(node));
   const extractedPeers = extractPool
     .map((node) => ({ node, extracted: extractValue(node) }))
     .filter((item) => item.extracted.value != null);
   const scored = extractedPeers
-    .map((item) => ({ ...item, score: scoreUsageCandidate(item.node, item.extracted, element, extractedPeers) }))
+    .map((item) => ({
+      ...item,
+      score: scoreUsageCandidate(item.node, item.extracted, element, extractedPeers, pointer),
+    }))
     .sort((left, right) => right.score - left.score);
   const ms = perfNow() - startedAt;
   // Structural only — tag name + counts + ms (no usage text).
@@ -631,6 +647,7 @@ export function refineValueElement(element: Element): Element {
       extractCount: extractPool.length,
       hitCount: scored.length,
       topValue: scored[0]?.extracted.value ?? null,
+      hasPointer: Boolean(pointer),
       ms: Math.round(ms),
     });
     perfLog('picker.refineValueElement', startedAt, {
@@ -642,9 +659,9 @@ export function refineValueElement(element: Element): Element {
   return scored[0]?.node ?? element;
 }
 
-export function makeMetric(element: Element, metricId?: string): TaughtMetric {
+export function makeMetric(element: Element, metricId?: string, pointer?: { x: number; y: number }): TaughtMetric {
   const startedAt = perfNow();
-  const target = refineValueElement(element);
+  const target = refineValueElement(element, pointer);
   const refineMs = perfNow() - startedAt;
   const anchorStartedAt = perfNow();
   const anchor = createAnchorFingerprint(target);
@@ -688,8 +705,12 @@ export function makeMetric(element: Element, metricId?: string): TaughtMetric {
 }
 
 /** Teach-time reset label/ISO for the live dashboard snapshot (DOM may be gone after Done). */
-export function liveResetForElement(element: Element, now = Date.now()): { resetLabel: string | null; resetAt: string | null } {
-  const target = refineValueElement(element);
+export function liveResetForElement(
+  element: Element,
+  now = Date.now(),
+  pointer?: { x: number; y: number },
+): { resetLabel: string | null; resetAt: string | null } {
+  const target = refineValueElement(element, pointer);
   const live = inferResetLive(target, now);
   return { resetLabel: live.resetLabel, resetAt: live.resetAt };
 }
@@ -1033,7 +1054,8 @@ function selectAtPoint(clientX: number, clientY: number): void {
     usedHoverFallback: lastHoverHit?.element === element,
   });
   const refineStartedAt = perfNow();
-  let target = refineValueElement(element);
+  const pointer = { x: clientX, y: clientY };
+  let target = refineValueElement(element, pointer);
   let refineMs = perfNow() - refineStartedAt;
   let extracted = extractValue(target);
   // Hover already showed a value: never lose the click because refine walked elsewhere.
@@ -1063,9 +1085,9 @@ function selectAtPoint(clientX: number, clientY: number): void {
   try {
     const metricStartedAt = perfNow();
     // target is already refined — makeMetric will re-refine cheaply on a small node.
-    const metric = makeMetric(target, initialMetricId);
+    const metric = makeMetric(target, initialMetricId, pointer);
     const makeMetricMs = perfNow() - metricStartedAt;
-    const resetLive = liveResetForElement(target);
+    const resetLive = liveResetForElement(target, Date.now(), pointer);
     initialMetricId = undefined;
     activePickerMode = 'metrics';
     const fallback = [...savedMetrics.filter((item) => item.metricId !== metric.metricId), metric];
