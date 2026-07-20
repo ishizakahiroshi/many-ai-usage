@@ -390,6 +390,8 @@ usage.html:
 | 2026-07-19 | 確定 | Try samples をスターターに吸収（D5-A）。UI 文言は「スターターを取り込む」 |
 | 2026-07-19 | 確定 | サンプルアイコンは `resources/provider-sample-icons/`（many-ai-cli 同型の文字バッジ）。拡張 dist に同梱せず、取込時に iconUrl を一度 fetch → `iconDataUrl` 保存。ユーザー上書き可 |
 | 2026-07-19 | 確定 | ストア申請はスターター本線込みの **一括**（分割の審査短縮より離脱リスクを優先）。詳細: `reference_store-submit-split-vs-bulk.md` |
+| 2026-07-19 | 確定 | **OpenCode Go は starter に載せない**。usage URL が `/workspace/<wrk_…>/go` で個人依存。urlMatch のみ・URL タイル無しは schema 未対応のため今やらない。dogfood は storage のみ。正本: `reference_opencode-go-personal-workspace-url.md` |
+| 2026-07-19 | 確定 | **GitHub Copilot は taught metrics を starter に載せない**（URL タイル維持）。billing ハブ・2026-06 AI credits 移行・プラン差・DOM がグラフ中心で teach が外れやすい。dogfood で Overview 見出しを teach した疑い。正本: `reference_github-copilot-usage-teach.md` |
 
 ---
 
@@ -401,7 +403,9 @@ usage.html:
 - トラック生 JSON UI: `src/options/main.tsx`（TaughtMetric pretty-print + copy）
 - 既存 plan: `plan_try-samples-onboarding.md`（URL のみオプトインの経緯）
 - 混同注意: `pending_user-locale-json-import.md` は **UI 言語パック** の話。本 plan とは別
+- OpenCode Go（個人 workspace URL・starter 除外）: `reference_opencode-go-personal-workspace-url.md`
 
 参照: `plan_try-samples-onboarding.md`（理由: 既存オプトイン fetch の詳細手順が長く、本 plan は差分方針に集中するため）
 参照: `src/shared/schema.ts`（理由: ProviderConfig / TaughtMetric の正本はコード側で動的）
 参照: `reference_store-submit-split-vs-bulk.md`（理由: 分割申請 vs 一括の審査日数・離脱リスク判断の正本）
+参照: `reference_opencode-go-personal-workspace-url.md`（理由: 個人 path の事実と starter 除外方針の正本）

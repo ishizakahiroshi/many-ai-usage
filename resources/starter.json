@@ -90,11 +90,14 @@
       "id": "sample:copilot",
       "displayName": "GitHub Copilot",
       "url": "https://github.com/settings/billing",
-      "urlMatch": ["https://github.com/settings/*"],
+      "urlMatch": [
+        "https://github.com/settings/billing*",
+        "https://github.com/settings/*"
+      ],
       "mode": "auto",
       "refreshIntervalMinutes": 15,
       "iconUrl": "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/copilot.svg",
-      "note": "URL tile only until verified teach results are published.",
+      "note": "URL tile only — no taught metrics. Billing Overview is ALL GitHub products (not Copilot-only). Do NOT teach Overview / Current metered usage headings (dollar totals are multi-product). Copilot Free often has no % / completions counter on this page; filter Metered usage → Copilot for spend $ only. AI-credits % needs paid plan + clear number leaf; Re-teach if you grab chrome. Verified 2026-07-19 dogfood: Free plan Overview unsuited for remaining-quota bars.",
       "metrics": []
     },
     {

@@ -113,19 +113,46 @@ function MiniMetric({ metric, lowest, t }: { metric: NormalizedMetric; lowest: b
   );
 }
 
-function ProviderRow({ provider, snapshot, state, reload, t }: {
+function ProviderRow({ provider, snapshot, state, reload, t, dragging, onDragStart, onDragEnd, onDropOn }: {
   provider: ProviderConfig;
   snapshot: DashboardResponse['snapshots'][string];
   state: ProviderRuntimeState;
   reload: () => void;
   t: TranslateFn;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDropOn: (fromId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const lowest = useMemo(() => lowestMetric(snapshot?.metrics ?? []), [snapshot]);
   const metrics = snapshot?.metrics ?? [];
   return (
-    <article class={`provider-row ${expanded ? 'expanded' : ''}`}>
+    <article
+      class={`provider-row ${expanded ? 'expanded' : ''} ${dragging ? 'dragging' : ''}`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const fromId = event.dataTransfer?.getData('text/plain');
+        if (fromId) onDropOn(fromId);
+      }}
+    >
       <div class="row-main">
+        <span
+          class="drag-handle"
+          draggable
+          title={t('popup.reorder')}
+          aria-label={t('popup.reorderAria', { name: provider.displayName })}
+          onDragStart={(event) => {
+            event.dataTransfer?.setData('text/plain', provider.id);
+            if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+            onDragStart();
+          }}
+          onDragEnd={onDragEnd}
+        >☰</span>
         <div class="provider-name" title={provider.url}>
           {provider.iconDataUrl
             ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" />
@@ -281,7 +308,9 @@ function IssueCard({ provider, snapshot, state, reload, t }: {
 
 function PopupApp() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [openingRefresh, setOpeningRefresh] = useState(true);
   const [issuesOpen, setIssuesOpen] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
   const [t, setT] = useState<TranslateFn | null>(null);
   const [locale, setLocale] = useState('en');
   const [catalog, setCatalog] = useState<LocaleCatalog | null>(null);
@@ -297,7 +326,16 @@ function PopupApp() {
       .catch(() => setT(() => (key: string) => key));
   };
 
-  useEffect(reload, []);
+  useEffect(() => {
+    void (async () => {
+      // The dashboard is useful only when it represents the moment the user opened it.  Wait for
+      // a fresh capture (or a recorded failure) before showing cached values.
+      await sendMessage({ type: 'REFRESH_DASHBOARD' }).catch(() => undefined);
+      const next = await sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' });
+      setDashboard(next);
+      setOpeningRefresh(false);
+    })();
+  }, []);
   useEffect(() => {
     applyI18n();
   }, []);
@@ -326,7 +364,21 @@ function PopupApp() {
     void setStoredUiLocale(code).then(() => applyI18n());
   };
 
-  if (!dashboard || !t) return <div class="popup-shell loading">{t?.('popup.loading') ?? t?.('common.loading') ?? 'Loading…'}</div>;
+  const reorder = async (fromId: string, toId: string) => {
+    if (fromId === toId || !dashboard) return;
+    // Full provider list (same contract as options) so issue rows keep relative order.
+    const ids = dashboard.providers.map((provider) => provider.id);
+    const from = ids.indexOf(fromId);
+    const to = ids.indexOf(toId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, fromId);
+    await sendMessage({ type: 'REORDER_PROVIDERS', ids });
+    setDraggedId(null);
+    reload();
+  };
+
+  if (openingRefresh || !dashboard || !t) return <div class="popup-shell loading">{t?.('popup.loading') ?? t?.('common.loading') ?? 'Loading…'}</div>;
   const normal = dashboard.providers.filter((provider) => {
     const state = dashboard.runtimeStates[provider.id];
     const snapshot = dashboard.snapshots[provider.id];
@@ -380,6 +432,12 @@ function PopupApp() {
             state={dashboard.runtimeStates[provider.id]}
             reload={reload}
             t={t}
+            dragging={draggedId === provider.id}
+            onDragStart={() => setDraggedId(provider.id)}
+            onDragEnd={() => setDraggedId(null)}
+            onDropOn={(fromId) => {
+              void reorder(fromId, provider.id);
+            }}
           />
         ))}
       </section>

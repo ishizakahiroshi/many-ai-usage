@@ -25,7 +25,17 @@ import {
 import { diagLog, obsLog, perfLog, perfNow } from '../shared/perf';
 import { matchesProviderUrl, originPattern } from '../shared/url';
 
-const pendingRefreshes = new Map<string, number>();
+type PendingRefresh = {
+  tabId: number;
+  /** Keep a popup-open refresh from activating or navigating a visible tab in the foreground. */
+  background: boolean;
+  /** A tab opened only to obtain a popup snapshot; close it once capture finishes. */
+  temporary: boolean;
+  completion: Promise<void>;
+  complete: () => void;
+};
+
+const pendingRefreshes = new Map<string, PendingRefresh>();
 type PickerMode = 'metrics' | 'reset';
 export type LiveMetricRead = {
   value: number;
@@ -162,6 +172,28 @@ async function updateFailure(providerId: string, reason: string): Promise<void> 
   });
 }
 
+function beginRefresh(providerId: string, tabId: number, background: boolean, temporary: boolean): PendingRefresh {
+  const current = pendingRefreshes.get(providerId);
+  if (current) return current;
+  let complete = () => {};
+  const completion = new Promise<void>((resolve) => { complete = resolve; });
+  const pending = { tabId, background, temporary, completion, complete };
+  pendingRefreshes.set(providerId, pending);
+  return pending;
+}
+
+function finishRefresh(providerId: string): void {
+  const pending = pendingRefreshes.get(providerId);
+  if (!pending) return;
+  pendingRefreshes.delete(providerId);
+  pending.complete();
+  if (pending.temporary) {
+    void chrome.tabs.remove(pending.tabId).catch(() => {
+      // The user may have closed the background tab while it was loading.
+    });
+  }
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -211,7 +243,7 @@ async function waitForTabComplete(tabId: number, timeoutMs = 12_000): Promise<ch
  * Grok (and similar) only put usage numbers in the DOM when the registered entry URL is open
  * (e.g. ?_s=usage). Capturing on plain grok.com chat yields "not read" / re-teach forever.
  */
-async function ensureTabOnProviderUsage(provider: ProviderConfig, tabId: number): Promise<boolean> {
+async function ensureTabOnProviderUsage(provider: ProviderConfig, tabId: number, background = false): Promise<boolean> {
   try {
     let tab = await chrome.tabs.get(tabId);
     if (isOnProviderUsageEntry(provider, tab.url)) {
@@ -224,7 +256,7 @@ async function ensureTabOnProviderUsage(provider: ProviderConfig, tabId: number)
       from: tab.url ?? null,
       to: provider.url,
     });
-    await chrome.tabs.update(tabId, { url: provider.url, active: true, autoDiscardable: false });
+    await chrome.tabs.update(tabId, { url: provider.url, active: !background, autoDiscardable: false });
     tab = (await waitForTabComplete(tabId)) ?? tab;
     // Usage sheets are often SPA-mounted after 'complete'.
     await delay(1_000);
@@ -234,13 +266,13 @@ async function ensureTabOnProviderUsage(provider: ProviderConfig, tabId: number)
   }
 }
 
-async function injectCapture(tabId: number, provider: ProviderConfig, force = false): Promise<boolean> {
+async function injectCapture(tabId: number, provider: ProviderConfig, force = false, background = false): Promise<boolean> {
   const key = `${tabId}:${provider.id}`;
   if (injectionInFlight.has(key)) return false;
   injectionInFlight.add(key);
   try {
     if (!(await hasPermission(provider))) return false;
-    if (!(await ensureTabOnProviderUsage(provider, tabId))) return false;
+    if (!(await ensureTabOnProviderUsage(provider, tabId, background))) return false;
     // Re-executing content.js creates a new isolate that used to delete the open picker host.
     if (!(await ensureContentScript(tabId))) return false;
     if (force) {
@@ -333,9 +365,11 @@ async function handleProviderTabReady(tabId: number, currentUrl: string): Promis
     if (pendingPicker?.providerId === provider.id) {
       await activatePickerOnTab(tabId, provider, pendingPicker);
     } else {
-      await injectCapture(tabId, provider);
+      const pending = pendingRefreshes.get(provider.id);
+      await injectCapture(tabId, provider, pending?.tabId === tabId, pending?.background ?? false);
     }
-    if (pendingRefreshes.get(provider.id) === tabId) pendingRefreshes.delete(provider.id);
+    // A forced refresh completes only when its content script returns a result.  Dropping the
+    // pending entry here would make a popup believe that navigation itself was fresh data.
   }
 }
 
@@ -344,22 +378,51 @@ async function findMatchingTab(provider: ProviderConfig): Promise<chrome.tabs.Ta
   return tabs.find((tab) => tab.id != null && tab.url && matchesProviderUrl(provider, tab.url)) ?? null;
 }
 
-async function refreshProvider(providerId: string): Promise<{ started: boolean; tabId?: number }> {
+async function refreshProvider(providerId: string, background = false): Promise<{ started: boolean; tabId?: number; completion?: Promise<void> }> {
   const provider = await getProvider(providerId);
   if (!provider) return { started: false };
   const tab = await findMatchingTab(provider);
   if (tab?.id != null) {
-    pendingRefreshes.set(providerId, tab.id);
+    const pending = beginRefresh(providerId, tab.id, background, false);
     try {
       await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_NOW' });
     } catch {
-      await injectCapture(tab.id, provider, true);
+      await injectCapture(tab.id, provider, true, background);
     }
-    return { started: true, tabId: tab.id };
+    return { started: true, tabId: tab.id, completion: pending.completion };
   }
-  const created = await chrome.tabs.create({ url: provider.url, active: true });
-  if (created.id != null) pendingRefreshes.set(providerId, created.id);
-  return { started: created.id != null, tabId: created.id };
+  // Popup-open refreshes must not steal focus (which would close the popup).  The tab is closed
+  // after CAPTURE_RESULT / CAPTURE_FAILURE, so no background tabs accumulate.
+  const created = await chrome.tabs.create({ url: provider.url, active: !background });
+  if (created.id == null) return { started: false };
+  const pending = beginRefresh(providerId, created.id, background, background);
+  if (created.status === 'complete') void injectCapture(created.id, provider, true, background);
+  return { started: true, tabId: created.id, completion: pending.completion };
+}
+
+async function refreshDashboard(): Promise<{ refreshed: number; skipped: number; timedOut: number }> {
+  const providers = (await getDashboard()).providers;
+  const permitted = await Promise.all(providers.map(async (provider) => ({ provider, allowed: await hasPermission(provider) })));
+  const eligible = permitted.filter((item) => item.allowed).map((item) => item.provider);
+  const attempts = await Promise.all(eligible.map(async (provider) => {
+    const started = await refreshProvider(provider.id, true);
+    if (!started.started || !started.completion) return 'skipped' as const;
+    const completed = await Promise.race([
+      started.completion.then(() => true),
+      delay(15_000).then(() => false),
+    ]);
+    if (!completed) {
+      await updateFailure(provider.id, 'Timed out while refreshing usage data.');
+      finishRefresh(provider.id);
+      return 'timed_out' as const;
+    }
+    return 'refreshed' as const;
+  }));
+  return {
+    refreshed: attempts.filter((result) => result === 'refreshed').length,
+    skipped: providers.length - eligible.length + attempts.filter((result) => result === 'skipped').length,
+    timedOut: attempts.filter((result) => result === 'timed_out').length,
+  };
 }
 
 /** True when the open tab is already on the registered usage entry (incl. query like ?_s=usage). */
@@ -712,13 +775,16 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
     }
     case 'CAPTURE_RESULT':
       await updateFromSnapshot(message.providerId, message.snapshot);
-      pendingRefreshes.delete(message.providerId);
+      finishRefresh(message.providerId);
       return { ok: true };
     case 'CAPTURE_FAILURE':
       await updateFailure(message.providerId, message.reason);
+      finishRefresh(message.providerId);
       return { ok: false };
     case 'REFRESH_PROVIDER':
       return refreshProvider(message.providerId);
+    case 'REFRESH_DASHBOARD':
+      return refreshDashboard();
     case 'OPEN_PROVIDER': {
       const provider = await getProvider(message.providerId);
       if (!provider) return { opened: false };
@@ -899,10 +965,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   pendingPickers.delete(tabId);
   teachSessions.delete(tabId);
-  for (const [providerId, pendingTabId] of pendingRefreshes) {
-    if (pendingTabId !== tabId) continue;
-    pendingRefreshes.delete(providerId);
-    void updateFailure(providerId, 'tab closed during refresh');
+  for (const [providerId, pending] of pendingRefreshes) {
+    if (pending.tabId !== tabId) continue;
+    void updateFailure(providerId, 'tab closed during refresh').finally(() => finishRefresh(providerId));
   }
 });
 

@@ -261,6 +261,33 @@ describe('background continuous teach sessions', () => {
     expect(state.runtimeStates['fixture:continuous'].status).toBe('ok');
   });
 
+  it('refreshes permitted providers before a popup dashboard is shown', async () => {
+    sendTabMessage.mockImplementation(async (tabId: number, message: { type: string }) => {
+      if (message.type === 'CAPTURE_NOW') {
+        await background.handleMessage({
+          type: 'CAPTURE_RESULT',
+          providerId: 'fixture:continuous',
+          snapshot: {
+            providerId: 'fixture:continuous',
+            displayName: 'Synthetic AI',
+            capturedAt: new Date().toISOString(),
+            source: 'user_taught',
+            status: 'ok',
+            metrics: [],
+            warningReason: null,
+            lastFailureReason: null,
+          },
+        }, { tab: { id: tabId } } as chrome.runtime.MessageSender);
+      }
+      return { ok: true };
+    });
+
+    const result = await background.handleMessage({ type: 'REFRESH_DASHBOARD' });
+
+    expect(result).toEqual({ refreshed: 1, skipped: 0, timedOut: 0 });
+    expect(sendTabMessage).toHaveBeenCalledWith(5, { type: 'CAPTURE_NOW' });
+  });
+
   it('opens options by re-navigating an existing tab (zombie after extension reload)', async () => {
     const create = createTab;
     create.mockClear();

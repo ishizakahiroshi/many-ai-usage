@@ -8,6 +8,8 @@ export type RuntimeMessage =
   | { type: 'CAPTURE_FAILURE'; providerId: string; reason: string }
   | { type: 'CAPTURE_NOW'; force?: boolean }
   | { type: 'REFRESH_PROVIDER'; providerId: string }
+  /** Re-read every permitted provider before the popup displays its dashboard. */
+  | { type: 'REFRESH_DASHBOARD' }
   | { type: 'OPEN_PROVIDER'; providerId: string }
   | { type: 'OPEN_OPTIONS'; providerId?: string }
   | { type: 'REQUEST_PERMISSION'; providerId: string }
