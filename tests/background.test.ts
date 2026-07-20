@@ -378,4 +378,59 @@ describe('background continuous teach sessions', () => {
     expect(state.providers[0].metrics[0]).toMatchObject({ label: 'Weekly remaining', resetAnchor });
     expect(sendTabMessage).toHaveBeenCalledWith(99, expect.objectContaining({ pickerMode: 'reset', metricId: 'weekly' }));
   });
+
+  it('keeps distinct metricIds with the same label on Done (no silent label-merge overwrite)', async () => {
+    // Pre-existing taught metric (e.g. first column already saved earlier).
+    const rolling = metric('taught-rolling', 'ローリング利用量');
+    rolling.valueAnchor = {
+      selectors: ['#rolling-value'],
+      tagName: 'span',
+      nearbyLabel: 'ローリング利用量0%',
+    };
+    state.providers[0].metrics = [rolling];
+    await openTeachSession();
+    const sender = { tab: { id: 99 } } as chrome.runtime.MessageSender;
+    // Second column mis-labeled as the same display name but with a new metricId
+    // (the historical bug path that wiped the first metric's selectors).
+    const colliding = metric('taught-weekly-mislabel', 'ローリング利用量');
+    colliding.valueAnchor = {
+      selectors: ['section > div:nth-of-type(2)'],
+      tagName: 'div',
+      nearbyLabel: 'ローリング利用量0%週間利用量0%',
+    };
+    await background.handleMessage({
+      type: 'SAVE_METRIC',
+      providerId: 'fixture:continuous',
+      metric: colliding,
+      liveRead: { value: 0, used: 0, remaining: null, total: 100, unit: 'percent', evidence: '0%', semanticSignals: ['used'] },
+    }, sender);
+    await background.handleMessage({ type: 'DONE_TEACH', providerId: 'fixture:continuous' }, sender);
+    const saved = state.providers[0].metrics as TaughtMetric[];
+    expect(saved).toHaveLength(2);
+    expect(saved.map((item) => item.metricId).sort()).toEqual(['taught-rolling', 'taught-weekly-mislabel']);
+    const keptRolling = saved.find((item) => item.metricId === 'taught-rolling');
+    expect(keptRolling?.valueAnchor?.selectors).toEqual(['#rolling-value']);
+    expect(keptRolling?.valueAnchor?.tagName).toBe('span');
+  });
+
+  it('replaces an existing metric on re-teach when metricId matches', async () => {
+    const original = metric('taught-rolling', 'ローリング利用量');
+    original.valueAnchor = { selectors: ['#old'], tagName: 'span' };
+    state.providers[0].metrics = [original];
+    await openTeachSession();
+    const sender = { tab: { id: 99 } } as chrome.runtime.MessageSender;
+    const reteach = metric('taught-rolling', 'ローリング利用量');
+    reteach.valueAnchor = { selectors: ['#new'], tagName: 'span' };
+    await background.handleMessage({
+      type: 'SAVE_METRIC',
+      providerId: 'fixture:continuous',
+      metric: reteach,
+      liveRead: { value: 12, used: 12, remaining: null, total: 100, unit: 'percent', evidence: '12%', semanticSignals: ['used'] },
+    }, sender);
+    await background.handleMessage({ type: 'DONE_TEACH', providerId: 'fixture:continuous' }, sender);
+    const saved = state.providers[0].metrics as TaughtMetric[];
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.metricId).toBe('taught-rolling');
+    expect(saved[0]?.valueAnchor?.selectors).toEqual(['#new']);
+  });
 });

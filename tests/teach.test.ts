@@ -96,6 +96,50 @@ describe('teach-mode pure functions', () => {
     expect(extractValue(chat).value).toBe(1);
   });
 
+  it('honors click coordinates when refining a multi-column usage row', async () => {
+    const { refineValueElement } = await import('../src/content/teach/picker');
+    // OpenCode-like three columns under one wide root. Without pointer scoring the
+    // first column can win on text alone even when the user clicked the second.
+    document.body.innerHTML = `
+      <section id="row" class="usage-row">
+        <div class="col" id="col-rolling">
+          <div class="label">ローリング利用量</div>
+          <span id="rolling-value">0%</span>
+          <div class="reset">リセットまで 5 時間 0 分</div>
+        </div>
+        <div class="col" id="col-weekly">
+          <div class="label">週間利用量</div>
+          <span id="weekly-value">0%</span>
+          <div class="reset">リセットまで 6 日</div>
+        </div>
+        <div class="col" id="col-monthly">
+          <div class="label">月間利用量</div>
+          <span id="monthly-value">0%</span>
+          <div class="reset">リセットまで 20 日</div>
+        </div>
+      </section>`;
+    const boxes: Record<string, DOMRect> = {
+      row: { x: 0, y: 0, width: 600, height: 120, top: 0, left: 0, bottom: 120, right: 600, toJSON() { return this; } },
+      'col-rolling': { x: 0, y: 0, width: 200, height: 120, top: 0, left: 0, bottom: 120, right: 200, toJSON() { return this; } },
+      'col-weekly': { x: 200, y: 0, width: 200, height: 120, top: 0, left: 200, bottom: 120, right: 400, toJSON() { return this; } },
+      'col-monthly': { x: 400, y: 0, width: 200, height: 120, top: 0, left: 400, bottom: 120, right: 600, toJSON() { return this; } },
+      'rolling-value': { x: 40, y: 40, width: 40, height: 24, top: 40, left: 40, bottom: 64, right: 80, toJSON() { return this; } },
+      'weekly-value': { x: 240, y: 40, width: 40, height: 24, top: 40, left: 240, bottom: 64, right: 280, toJSON() { return this; } },
+      'monthly-value': { x: 440, y: 40, width: 40, height: 24, top: 40, left: 440, bottom: 64, right: 480, toJSON() { return this; } },
+    };
+    for (const [id, rect] of Object.entries(boxes)) {
+      const el = document.getElementById(id);
+      if (el) el.getBoundingClientRect = () => rect;
+    }
+    const row = document.querySelector('#row')!;
+    const weekly = refineValueElement(row, { x: 250, y: 50 });
+    expect(weekly.id).toBe('weekly-value');
+    const monthly = refineValueElement(row, { x: 450, y: 50 });
+    expect(monthly.id).toBe('monthly-value');
+    const rolling = refineValueElement(row, { x: 50, y: 50 });
+    expect(rolling.id).toBe('rolling-value');
+  });
+
   it('stages an inner legend chip when the pointer hits that chip (not the whole card)', async () => {
     document.body.innerHTML = `
       <section class="usage-card" id="card" aria-valuenow="0">

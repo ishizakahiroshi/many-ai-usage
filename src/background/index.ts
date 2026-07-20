@@ -688,7 +688,11 @@ async function saveCompletedTeach(tabId: number, session: TeachSession): Promise
   if (!provider || session.metrics.length === 0) return false;
   const metrics = [...provider.metrics];
   for (const staged of session.metrics) {
-    const index = metrics.findIndex((metric) => metric.metricId === staged.metricId || metric.label === staged.label);
+    // Merge by metricId only. Matching on label silently overwrote an older metric
+    // when two taught values happened to share a display name (e.g. multi-column
+    // pages where refine mis-labeled a second column). Re-teach keeps the same
+    // metricId, so intentional updates still replace in place.
+    const index = metrics.findIndex((metric) => metric.metricId === staged.metricId);
     if (index >= 0) metrics[index] = { ...staged, metricId: metrics[index].metricId };
     else metrics.push(staged);
   }
