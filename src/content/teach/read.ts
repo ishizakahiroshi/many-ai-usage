@@ -93,6 +93,9 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
   const missing: string[] = [];
   let usedHeadlineFallback = false;
   const taughtList = provider.metrics.filter((metric) => metric.enabled && metric.valueAnchor);
+  // Multiple taught metrics can independently fall back to the page headline; without this,
+  // they would all collapse onto the same node (e.g. Claude's session/weekly/model meters).
+  const usedHeadlineElements = new Set<Element>();
   diagLog('read.start', {
     providerId: provider.id,
     taughtCount: taughtList.length,
@@ -111,7 +114,7 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
       || (extracted ? looksLikeBreakdownChip(extracted.evidence) : false);
     if (preferHeadline) {
       // Legend chips (Grok Build / チャット / API) are not the SuperGrok total the user wants.
-      const headline = findUsageHeadline(document);
+      const headline = findUsageHeadline(document, usedHeadlineElements);
       if (headline) {
         const headlineExtracted = extractValue(headline);
         if (headlineExtracted.value != null) {
@@ -120,6 +123,7 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
           headlineFallback = true;
           usedHeadlineFallback = true;
           resolveVia = 'headline';
+          usedHeadlineElements.add(headline);
         }
       }
     }
