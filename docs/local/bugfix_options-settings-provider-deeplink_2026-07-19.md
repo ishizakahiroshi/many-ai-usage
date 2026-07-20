@@ -1,4 +1,6 @@
-# [様子見] 障害対応記録: popup 行の Settings が常に一覧先頭（Claude 等）を開く
+# [完了] 障害対応記録: popup 行の Settings が常に一覧先頭（Claude 等）を開く
+
+> 2026-07-20: `OPEN_OPTIONS` への `providerId` 追加（`src/shared/messages.ts:14`）、`src/options/main.tsx` の `bootProviderId`/`requestedProviderId()` 実装確認済み。実機確認はリリース前の動作確認フェーズで実施。
 
 ## 症状
 

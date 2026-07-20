@@ -195,6 +195,11 @@ describe('teach-mode pure functions', () => {
     expect(extractValue(document.querySelector('div')!)).toMatchObject({ value: 62, unit: 'percent' });
   });
 
+  it('converts a raw aria-valuenow/aria-valuemax pair to a percentage when no unit keyword is nearby', () => {
+    document.body.innerHTML = '<div role="progressbar" aria-valuenow="3" aria-valuemax="5" aria-label="Widgets">3</div>';
+    expect(extractValue(document.querySelector('div')!)).toMatchObject({ value: 60, total: 100, unit: 'percent' });
+  });
+
   it('rejects years and reset dates while preferring a real nearby percentage', () => {
     document.body.innerHTML = '<div id="reset">リセット: 2026/07/22</div><div id="card">週間利用上限 62% 残り リセット: 2026/07/22</div><div id="year">2026</div>';
     expect(extractValue(document.querySelector('#reset')!).value).toBeNull();
@@ -317,6 +322,36 @@ describe('teach-mode pure functions', () => {
     expect(snapshot.warningReason).toBeNull();
   });
 
+  it('keeps a successfully resolved value even when the taught label contains a breakdown keyword like "API"', () => {
+    document.body.innerHTML = '<div><span id="value">120 requests remaining</span></div><div id="unrelated">80% used</div>';
+    const provider: ProviderConfig = {
+      schema: 'many-ai-usage.provider.v1',
+      id: 'fixture:label-not-chip',
+      displayName: 'SomeService',
+      url: 'https://someservice.example/?usage=1',
+      urlMatch: [],
+      mode: 'taught',
+      displayEnabled: true,
+      refreshIntervalMinutes: 15,
+      metrics: [{
+        metricId: 'api-credits',
+        label: 'API credits',
+        kind: 'count',
+        unit: 'requests',
+        valueAnchor: createAnchorFingerprint(document.querySelector('#value')!),
+        interpretation: 'remaining_total',
+        enabled: true,
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: 0,
+    };
+    const snapshot = readTaught(document, provider);
+    expect(snapshot.metrics).toHaveLength(1);
+    expect(snapshot.metrics[0].remaining).toBe(120);
+    expect(snapshot.metrics[0].confidence).toBe('taught');
+  });
+
   it('avoids baking Tailwind utility classes into taught selectors', () => {
     document.body.innerHTML = '<main><p class="quota inline-flex items-center text-sm tabular-nums gap-1">72% remaining</p></main>';
     const anchor = createAnchorFingerprint(document.querySelector('p')!);
@@ -416,6 +451,50 @@ describe('teach-mode pure functions', () => {
     expect(snapshot.metrics).toHaveLength(2);
     expect(snapshot.metrics[0].used).not.toBe(snapshot.metrics[1].used);
     expect([snapshot.metrics[0].used, snapshot.metrics[1].used].sort()).toEqual([1, 79]);
+  });
+
+  it('prefers a headline near the taught label over a higher-scoring unrelated percent elsewhere on the page', () => {
+    // "far" sits earlier in document order AND scores higher (shorter, no extra suffix text),
+    // so a full-document scan alone would pick it. Only scoping the search near the taught
+    // label's surviving container (excluding the unrelated "col-b" branch) picks "near" instead.
+    document.body.innerHTML = `
+      <div id="app">
+        <div id="col-b"><div><div><div id="far">99% 使用済</div></div></div></div>
+        <div id="col-a"><div><div><div>
+          <div>Weekly quota</div>
+          <div id="near">40% 使用済（今週）</div>
+        </div></div></div></div>
+      </div>`;
+    const provider: ProviderConfig = {
+      schema: 'many-ai-usage.provider.v1',
+      id: 'fixture:headline-near',
+      displayName: 'SomeService',
+      url: 'https://someservice.example/?usage=1',
+      urlMatch: [],
+      mode: 'taught',
+      displayEnabled: true,
+      refreshIntervalMinutes: 15,
+      metrics: [{
+        metricId: 'weekly',
+        label: 'Weekly quota',
+        kind: 'percent',
+        unit: 'percent',
+        valueAnchor: {
+          selectors: ['#does-not-exist'],
+          tagName: 'div',
+          textFingerprint: 'deadbeef',
+          nearbyLabel: 'Weekly quota',
+        },
+        interpretation: 'used_percent',
+        enabled: true,
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: 0,
+    };
+    const snapshot = readTaught(document, provider);
+    expect(snapshot.metrics).toHaveLength(1);
+    expect(snapshot.metrics[0].used).toBe(40);
   });
 
   it('keeps the picker open while a metric is staged, then completes from the panel', async () => {

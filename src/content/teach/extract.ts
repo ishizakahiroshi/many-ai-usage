@@ -89,8 +89,13 @@ export function extractValue(element: Element): ExtractedValue {
       && preferred.unit === 'percent';
     if (!textHasBetterPercent) {
       const max = numberValue(element.getAttribute('aria-valuemax'));
-      const value = max != null && max > 0 && unit !== 'percent' ? ariaValue : ariaValue;
-      return { value, used: semanticSignals.includes('used') ? value : null, remaining: semanticSignals.includes('remaining') || unit === 'percent' ? value : null, total: max, unit: max != null && unit === 'custom' ? 'percent' : unit, evidence, semanticSignals: [...semanticSignals, 'aria-valuenow'] };
+      // aria-valuenow is a raw count against aria-valuemax, not a percentage: convert when no
+      // explicit unit keyword was found nearby and we're about to report unit as 'percent'.
+      const forcePercent = max != null && max > 0 && unit === 'custom';
+      const value = forcePercent ? (ariaValue / max) * 100 : ariaValue;
+      const resolvedTotal = forcePercent ? 100 : max;
+      const resolvedUnit = forcePercent ? 'percent' : unit;
+      return { value, used: semanticSignals.includes('used') ? value : null, remaining: semanticSignals.includes('remaining') || resolvedUnit === 'percent' ? value : null, total: resolvedTotal, unit: resolvedUnit, evidence, semanticSignals: [...semanticSignals, 'aria-valuenow'] };
     }
   }
 

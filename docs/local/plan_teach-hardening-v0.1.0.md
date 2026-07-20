@@ -1,15 +1,16 @@
 ---
 type: plan
-status: in-progress
+status: done
 tags: [v0.1.0, teach-mode-hardening, blocker, release]
 owner: ishizakahiroshi
 review_status: draft
 related: [plan_teach-multi-metric-continuous.md, plan_try-samples-onboarding.md, review_teach-mode-ux_2026-07-16.html, design_unpacked-testing-guide_2026-07-16.html]
-last_reviewed: 2026-07-16
-due: 2026-07-23
+last_reviewed: 2026-07-20
 ---
 
-# plan: [本体・文書実装済み / 実機検証待ち] v0.1.0 teach-mode hardening — 既知バグ 3 件を v0.1.0 出荷前に潰す
+# plan: [完了] v0.1.0 teach-mode hardening — 既知バグ 3 件を v0.1.0 出荷前に潰す
+
+> 2026-07-20: 案D（新規タブpicker）・Continuous mode・heuristic改善を `src/content/teach/picker.ts`, `src/background/index.ts` で実装確認済み。実機検証はリリース前の動作確認フェーズで実施。
 
 ## 2026-07-16 実施状況
 

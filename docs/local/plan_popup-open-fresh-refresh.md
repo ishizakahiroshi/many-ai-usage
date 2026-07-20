@@ -1,6 +1,6 @@
 ---
 type: plan
-status: in-progress
+status: done
 tags: [popup, refresh, ux, v0.1.x]
 owner: ishizakahiroshi
 review_status: draft
@@ -8,10 +8,11 @@ related:
   - plan_v0.1.0-mvp.md
   - plan_popup-dnd-reorder.md
 last_reviewed: 2026-07-20
-due: 2026-07-27
 ---
 
-# [実行中] popup を開くたびに最新 usage を取得してから表示する
+# [完了] popup を開くたびに最新 usage を取得してから表示する
+
+> 2026-07-20: `REFRESH_DASHBOARD` メッセージ実装確認済み（`src/background/index.ts:814`, `src/popup/main.tsx:375`）。unpacked 実機確認はリリース前の動作確認フェーズで実施。
 
 > ローカル実装: 2026-07-20 · `pnpm run typecheck` / `pnpm test`（90件）成功。unpacked の手動確認は未完了。
 > このファイルを渡された AI は、残 C2 を実行する。C1 は再実装しない。

@@ -34,7 +34,7 @@ describe('background continuous teach sessions', () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    state = { providers: [provider()], snapshots: {}, runtimeStates: {}, schemaVersion: 1 };
+    state = { providers: [provider()], schemaVersion: 2 };
     sendTabMessage = vi.fn(async () => ({ ok: true }));
     createTab = vi.fn(async () => ({ id: 99, url: 'https://example.test/usage' }));
     getTab = vi.fn(async (tabId: number) => ({ id: tabId, url: 'https://example.test/usage', status: 'loading' }));
@@ -48,6 +48,9 @@ describe('background continuous teach sessions', () => {
             return Object.fromEntries(names.map((key) => [key, state[key]]));
           },
           set: async (values: Record<string, unknown>) => Object.assign(state, values),
+          remove: async (keys: string | string[]) => {
+            for (const key of Array.isArray(keys) ? keys : [keys]) delete state[key];
+          },
         },
       },
       permissions: { contains: async () => true, request: async () => true },
@@ -141,7 +144,7 @@ describe('background continuous teach sessions', () => {
     await background.handleMessage({ type: 'DONE_TEACH', providerId: 'fixture:continuous' }, sender);
     expect(state.providers[0].mode).toBe('taught');
     expect(state.providers[0].metrics.map((item: TaughtMetric) => item.label)).toEqual(['Remaining credits']);
-    expect(state.snapshots['fixture:continuous']?.metrics?.[0]?.remaining).toBe(18);
+    expect(state['snapshot:fixture:continuous']?.metrics?.[0]?.remaining).toBe(18);
     expect(removeTab).toHaveBeenCalledWith(99);
   });
 
@@ -174,9 +177,9 @@ describe('background continuous teach sessions', () => {
       },
     }, sender);
     await background.handleMessage({ type: 'DONE_TEACH', providerId: 'fixture:continuous' }, sender);
-    expect(state.snapshots['fixture:continuous']?.metrics?.[0]?.used ?? state.snapshots['fixture:continuous']?.metrics?.[0]?.remaining).toBe(66);
-    expect(state.snapshots['fixture:continuous']?.metrics?.[0]?.resetAt).toBe(new Date(2026, 6, 24, 9, 15).toISOString());
-    expect(state.snapshots['fixture:continuous']?.metrics?.[0]?.resetLabel).toMatch(/リセット/);
+    expect(state['snapshot:fixture:continuous']?.metrics?.[0]?.used ?? state['snapshot:fixture:continuous']?.metrics?.[0]?.remaining).toBe(66);
+    expect(state['snapshot:fixture:continuous']?.metrics?.[0]?.resetAt).toBe(new Date(2026, 6, 24, 9, 15).toISOString());
+    expect(state['snapshot:fixture:continuous']?.metrics?.[0]?.resetLabel).toMatch(/リセット/);
 
     // Simulate Grok re-capture after the usage sheet is gone.
     await background.handleMessage({
@@ -194,9 +197,9 @@ describe('background continuous teach sessions', () => {
       },
     });
 
-    expect(state.snapshots['fixture:continuous']?.metrics).toHaveLength(1);
-    expect(state.snapshots['fixture:continuous']?.metrics?.[0]?.used ?? state.snapshots['fixture:continuous']?.metrics?.[0]?.remaining).toBe(66);
-    expect(state.runtimeStates['fixture:continuous']?.status).toBe('warning');
+    expect(state['snapshot:fixture:continuous']?.metrics).toHaveLength(1);
+    expect(state['snapshot:fixture:continuous']?.metrics?.[0]?.used ?? state['snapshot:fixture:continuous']?.metrics?.[0]?.remaining).toBe(66);
+    expect(state['runtimeState:fixture:continuous']?.status).toBe('warning');
   });
 
   it('starts the picker immediately when the new tab is already complete', async () => {
@@ -216,33 +219,29 @@ describe('background continuous teach sessions', () => {
     const setSpy = vi.fn(async (values: Record<string, unknown>) => Object.assign(state, values));
     (chrome.storage.local as unknown as { set: typeof setSpy }).set = setSpy;
     // Snapshot older than refreshIntervalMinutes * 2 (15m → 30m).
-    state.snapshots = {
-      'fixture:continuous': {
-        providerId: 'fixture:continuous',
-        displayName: 'Synthetic AI',
-        capturedAt: new Date(Date.now() - 60 * 60_000).toISOString(),
-        source: 'user_taught',
-        status: 'ok',
-        metrics: [],
-        warningReason: null,
-        lastFailureReason: null,
-      },
+    state['snapshot:fixture:continuous'] = {
+      providerId: 'fixture:continuous',
+      displayName: 'Synthetic AI',
+      capturedAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+      source: 'user_taught',
+      status: 'ok',
+      metrics: [],
+      warningReason: null,
+      lastFailureReason: null,
     };
-    state.runtimeStates = {
-      'fixture:continuous': {
-        providerId: 'fixture:continuous',
-        lastAttemptAt: null,
-        lastSuccessAt: null,
-        lastFailureAt: null,
-        status: 'ok',
-        stale: false,
-        confidence: 'taught',
-        evidenceSummary: [],
-        retryAfter: null,
-        pageBinding: 'bound',
-        errorLabel: null,
-        consecutiveFailures: 0,
-      },
+    state['runtimeState:fixture:continuous'] = {
+      providerId: 'fixture:continuous',
+      lastAttemptAt: null,
+      lastSuccessAt: null,
+      lastFailureAt: null,
+      status: 'ok',
+      stale: false,
+      confidence: 'taught',
+      evidenceSummary: [],
+      retryAfter: null,
+      pageBinding: 'bound',
+      errorLabel: null,
+      consecutiveFailures: 0,
     };
 
     setSpy.mockClear();
@@ -258,7 +257,7 @@ describe('background continuous teach sessions', () => {
     // Two dashboard reads must not persist runtimeStates (would re-enter via options onChanged).
     expect(setSpy).not.toHaveBeenCalled();
     // Stored status stays as-is (response-only stale overlay).
-    expect(state.runtimeStates['fixture:continuous'].status).toBe('ok');
+    expect(state['runtimeState:fixture:continuous'].status).toBe('ok');
   });
 
   it('refreshes permitted providers before a popup dashboard is shown', async () => {

@@ -1,17 +1,17 @@
 ---
 type: plan
-status: in-progress
+status: done
 tags: [try-samples, onboarding, remote-registry, providers]
 owner: ishizakahiroshi
 review_status: draft
-related: [plan_add-providers-json.md, plan_usage-page-ja.md]
-last_reviewed: 2026-07-16
-due: 2026-07-23
+related: [plan_add-providers-json.md, plan_usage-page-ja.md, plan_starter-pack-import.md]
+last_reviewed: 2026-07-20
 ---
 
-# [進行中] plan: Try samples オプトイン化 (Remote Registry 版・v0.1)
+# [完了 → starter-pack-import に発展的に置換] plan: Try samples オプトイン化 (Remote Registry 版・v0.1)
 
-> ローカル実装完了: 2026-07-16 · typecheck / test (24 passed) / build:chrome / build:firefox / Chrome・Firefox bundle validation すべて緑。Remote Registry は公開・200応答確認済み。unpacked 手動確認は未完了。
+> ローカル実装完了: 2026-07-16 · typecheck / test (24 passed) / build:chrome / build:firefox / Chrome・Firefox bundle validation すべて緑。Remote Registry は公開・200応答確認済み。
+> **2026-07-20**: 単体方式は `plan_starter-pack-import.md` の starter pack 方式（`STARTER_PACK_URL`, `applyStarterProviders`）に発展的に吸収済み。当初の `applyRegistryProviders` は `@deprecated` として残存。unpacked 手動確認は starter-pack-import 側で実施。
 
 ## 背景
 

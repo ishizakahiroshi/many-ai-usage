@@ -1,18 +1,18 @@
 ---
 type: plan
-status: in-progress
+status: done
 tags: [teach-mode, picker, ux, multi-metric, new-tab, heuristic, v0.1.0]
 owner: ishizakahiroshi
 review_status: draft
 related: [plan_try-samples-onboarding.md, review_teach-mode-ux_2026-07-16.html, plan_teach-hardening-v0.1.0.md]
-last_reviewed: 2026-07-16
-due: 2026-07-23
+last_reviewed: 2026-07-20
 ---
 
 > **2026-07-16 昇格**: 本 plan の内容を v0.1.0 リリース前に取り込むことに変更（当初は v0.1.1 予定）。統合先: `plan_teach-hardening-v0.1.0.md`。本 md は「変更範囲 A〜C の実装詳細（14 ステップ）」の正典として維持し、リリース周りの追加ステップは統合先で管理する。
 > 判断シート `review_teach-mode-ux_2026-07-16.html` で決定: (A1) Continuous mode 採用 / (B1) reset anchor は自動推測 / (C1) picker "2026%" 誤検出 fix を本 plan に含める。
+> **2026-07-20**: 統合先 `plan_teach-hardening-v0.1.0.md` で done 化済み。本 md は正典としての役目を終え、実装は `src/content/teach/picker.ts`, `src/background/index.ts` で確認済み。
 
-# plan: [本体・文書実装済み / 実機検証待ち → v0.1.0 hardening] teach-mode 刷新 — 新規タブで開いて Continuous mode で複数 metric を一気に teach
+# plan: [完了 → v0.1.0 hardening に統合済み] teach-mode 刷新 — 新規タブで開いて Continuous mode で複数 metric を一気に teach
 
 ## 2026-07-16 実施状況
 

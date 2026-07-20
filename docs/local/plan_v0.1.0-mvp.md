@@ -1,15 +1,16 @@
 ---
 type: plan
-status: in-progress
+status: done
 tags: [implementation, mvp, browser-extension, mv3]
 owner: ishizakahiroshi
 review_status: draft
 related: [reference_study-synthesis.md, reference_study-ai-usage-dashboard.md, reference_study-openusage.md, plan_codex-study-reference-oss.md, review_v0.1.0-mvp-open-topics_2026-07-14.html, review_v0.1.0-mvp-open-topics_2026-07-14_decisions.md, review_v0.1.0-mvp-plan-fixes_2026-07-14_decisions.md, mockup_v0.1.0-mvp_2026-07-14.html, design_v0.1.0-mvp-visual_2026-07-14.html, review_v0.1.0-mvp-visual-v3_2026-07-14_decisions.md, plan_v0.1.0-mvp-pivot-to-teach-mode_2026-07-14.md]
-last_reviewed: 2026-07-14
-due: 2026-07-21
+last_reviewed: 2026-07-20
 ---
 
-# [進行中] many-ai-usage v0.1.0 MVP 実装計画
+# [完了] many-ai-usage v0.1.0 MVP 実装計画
+
+> 2026-07-20: C1〜C7 実装確認済み（src/shared, src/popup, src/options, src/background）。C8（ストア提出）は `manual_release-v0.1.0_2026-07-14.md` 側のリリース実行タスクとして分離。
 
 > 最終更新: 2026-07-14 (進捗点検・C1〜C3 done 反映 → その後 teach-mode ピボット決定)
 > **2026-07-14 pivot**: 実 Claude / Codex での動作検証で auto detector が誤値検知することが判明し、v0.2 予定だった teach-mode を v0.1.0 に前倒しする決定。差分は `docs/local/plan_v0.1.0-mvp-pivot-to-teach-mode_2026-07-14.md` を参照。本 plan の C3 は「降格」、C3.5 新設、完了条件は pivot 側で上書きされる

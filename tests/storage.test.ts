@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ProviderConfig } from '../src/shared/schema';
-import { applyRegistryProviders, getProviders, initializeStorage, reorderProviders } from '../src/shared/storage';
+import { applyRegistryProviders, getProviders, getRuntimeState, getSnapshot, initializeStorage, reorderProviders } from '../src/shared/storage';
 
 function provider(id: string, order: number): ProviderConfig {
   return {
@@ -32,6 +32,9 @@ describe('provider ordering persistence', () => {
             return Object.fromEntries(names.map((key) => [key, state[key]]));
           },
           set: async (values: Record<string, unknown>) => Object.assign(state, values),
+          remove: async (keys: string | string[]) => {
+            for (const key of Array.isArray(keys) ? keys : [keys]) delete state[key];
+          },
         },
       },
     };
@@ -40,7 +43,7 @@ describe('provider ordering persistence', () => {
   it('initializes with zero providers and a schema version', async () => {
     await initializeStorage();
     expect(state.providers).toEqual([]);
-    expect(state.schemaVersion).toBe(1);
+    expect(state.schemaVersion).toBe(2);
   });
 
   it('merges registry providers without overwriting existing entries', async () => {
@@ -51,7 +54,7 @@ describe('provider ordering persistence', () => {
     expect(result).toEqual({ added: ['sample:two'], skipped: ['sample:one'] });
     expect(providers).toHaveLength(2);
     expect(providers[0].displayName).toBe('My custom label');
-    expect(state.runtimeStates).toMatchObject({ 'sample:two': { status: 'needs_permission' } });
+    expect(state['runtimeState:sample:two']).toMatchObject({ status: 'needs_permission' });
   });
 
   it('is idempotent when the same registry is applied twice', async () => {
@@ -69,5 +72,47 @@ describe('provider ordering persistence', () => {
     const providers = await getProviders();
     expect(providers.map((item) => item.id)).toEqual(['sample:two', 'sample:one']);
     expect(providers.map((provider) => provider.order)).toEqual([0, 1]);
+  });
+
+  it('migrates pre-v2 combined snapshots/runtimeStates objects to per-provider keys without losing data', async () => {
+    // Simulate an existing install from before the per-provider-key change.
+    state.providers = [provider('sample:one', 0)];
+    state.schemaVersion = 1;
+    state.snapshots = {
+      'sample:one': {
+        providerId: 'sample:one',
+        displayName: 'sample:one',
+        capturedAt: '2026-07-16T00:00:00.000Z',
+        source: 'user_taught',
+        status: 'ok',
+        metrics: [],
+        warningReason: null,
+        lastFailureReason: null,
+      },
+    };
+    state.runtimeStates = {
+      'sample:one': {
+        providerId: 'sample:one',
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastFailureAt: null,
+        status: 'ok',
+        stale: false,
+        confidence: 'taught',
+        evidenceSummary: [],
+        retryAfter: null,
+        pageBinding: 'bound',
+        errorLabel: null,
+        consecutiveFailures: 0,
+      },
+    };
+
+    await initializeStorage();
+
+    expect(state.schemaVersion).toBe(2);
+    expect(state.snapshots).toBeUndefined();
+    expect(state.runtimeStates).toBeUndefined();
+    expect(await getSnapshot('sample:one')).toMatchObject({ providerId: 'sample:one', status: 'ok' });
+    expect(await getRuntimeState('sample:one')).toMatchObject({ providerId: 'sample:one', status: 'ok' });
   });
 });

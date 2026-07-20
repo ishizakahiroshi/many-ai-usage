@@ -1,15 +1,14 @@
 ---
 type: plan
-status: planned
+status: done
 tags: [study, oss-analysis, codex]
 owner: ishizakahiroshi
 review_status: draft
 related: []
-last_reviewed: 2026-07-12
-due: 2026-07-19
+last_reviewed: 2026-07-20
 ---
 
-# [計画] 参考 OSS 2 件の解析指示書（Codex 実行用）
+# [完了] 参考 OSS 2 件の解析指示書（Codex 実行用）
 
 > 最終更新: 2026-07-12(日) 18:48:12
 > 実行者: Codex 5.6 Luna（reasoning effort: xhigh）
@@ -22,6 +21,8 @@ due: 2026-07-19
 | C1 | AI_Usage_Dashboard（AGPL）の解析レポート作成 | fix | [並列OK with C2] |
 | C2 | openusage（MIT）の解析レポート作成 | fix | [並列OK with C1] |
 | C3 | 統合: many-ai-usage 設計への示唆まとめ | fix | — |
+
+> 3件とも成果物 md が完了条件を満たす内容で存在することを確認済み（2026-07-20）。
 
 実行順序: `(C1, C2) → C3`
 

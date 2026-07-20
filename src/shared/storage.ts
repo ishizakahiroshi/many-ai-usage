@@ -9,12 +9,37 @@ import {
 } from './schema';
 
 const PROVIDERS_KEY = 'providers';
-const SNAPSHOTS_KEY = 'snapshots';
-const RUNTIME_KEY = 'runtimeStates';
+// Legacy (pre schemaVersion 2) combined-object keys, kept only for one-time migration.
+const LEGACY_SNAPSHOTS_KEY = 'snapshots';
+const LEGACY_RUNTIME_KEY = 'runtimeStates';
 const VERSION_KEY = 'schemaVersion';
+const STORAGE_SCHEMA_VERSION = 2;
+
+// snapshot:<id> / runtimeState:<id> are separate keys per provider (schemaVersion 2+) so that
+// concurrent get-then-set on unrelated providers (e.g. refreshDashboard's parallel refreshes)
+// can no longer clobber each other's write to one shared combined object.
+function snapshotKey(id: string): string {
+  return `snapshot:${id}`;
+}
+
+function runtimeStateKey(id: string): string {
+  return `runtimeState:${id}`;
+}
 
 function localStorage(): chrome.storage.LocalStorageArea {
   return chrome.storage.local;
+}
+
+/** One-time migration from the pre-v2 combined `snapshots`/`runtimeStates` objects to per-provider keys. */
+async function migrateToPerProviderKeys(): Promise<void> {
+  const result = await localStorage().get([LEGACY_SNAPSHOTS_KEY, LEGACY_RUNTIME_KEY]);
+  const legacySnapshots = (result[LEGACY_SNAPSHOTS_KEY] ?? {}) as Record<string, unknown>;
+  const legacyRuntimeStates = (result[LEGACY_RUNTIME_KEY] ?? {}) as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  for (const [id, snapshot] of Object.entries(legacySnapshots)) patch[snapshotKey(id)] = snapshot;
+  for (const [id, state] of Object.entries(legacyRuntimeStates)) patch[runtimeStateKey(id)] = state;
+  if (Object.keys(patch).length > 0) await localStorage().set(patch);
+  await localStorage().remove([LEGACY_SNAPSHOTS_KEY, LEGACY_RUNTIME_KEY]);
 }
 
 export async function initializeStorage(): Promise<void> {
@@ -22,7 +47,11 @@ export async function initializeStorage(): Promise<void> {
   const rawProviders = result[PROVIDERS_KEY];
   const patch: Record<string, unknown> = {};
   if (!Array.isArray(rawProviders)) patch[PROVIDERS_KEY] = [];
-  if (typeof result[VERSION_KEY] !== 'number') patch[VERSION_KEY] = 1;
+  const storedVersion = typeof result[VERSION_KEY] === 'number' ? result[VERSION_KEY] : 0;
+  if (storedVersion < STORAGE_SCHEMA_VERSION) {
+    if (storedVersion < 2) await migrateToPerProviderKeys();
+    patch[VERSION_KEY] = STORAGE_SCHEMA_VERSION;
+  }
   if (Object.keys(patch).length > 0) await localStorage().set(patch);
 }
 
@@ -82,19 +111,14 @@ export async function applyStarterProviders(
   }
 
   await localStorage().set({ [PROVIDERS_KEY]: nextProviders });
-  const runtimeResult = await localStorage().get(RUNTIME_KEY);
-  const runtimeStates = { ...(runtimeResult[RUNTIME_KEY] ?? {}) };
-  for (const id of added) {
-    if (!runtimeStates[id]) {
-      runtimeStates[id] = makeRuntimeState(id, 'needs_permission');
+  // Per-provider keys: only touch the ids this call actually affects, never a shared object.
+  const touchedIds = [...added, ...replaced];
+  const existingResult = await localStorage().get(touchedIds.map(runtimeStateKey));
+  await Promise.all(touchedIds.map(async (id) => {
+    if (existingResult[runtimeStateKey(id)] === undefined) {
+      await localStorage().set({ [runtimeStateKey(id)]: makeRuntimeState(id, 'needs_permission') });
     }
-  }
-  for (const id of replaced) {
-    if (!runtimeStates[id]) {
-      runtimeStates[id] = makeRuntimeState(id, 'needs_permission');
-    }
-  }
-  await localStorage().set({ [RUNTIME_KEY]: runtimeStates });
+  }));
   return { added, skipped, replaced };
 }
 
@@ -126,41 +150,30 @@ export async function upsertProvider(provider: ProviderConfig): Promise<void> {
 
 export async function deleteProvider(id: string): Promise<void> {
   const providers = (await getProviders()).filter((provider) => provider.id !== id);
-  const result = await localStorage().get([SNAPSHOTS_KEY, RUNTIME_KEY]);
-  const snapshots = { ...(result[SNAPSHOTS_KEY] ?? {}) };
-  const runtimeStates = { ...(result[RUNTIME_KEY] ?? {}) };
-  delete snapshots[id];
-  delete runtimeStates[id];
-  await localStorage().set({ [PROVIDERS_KEY]: providers, [SNAPSHOTS_KEY]: snapshots, [RUNTIME_KEY]: runtimeStates });
+  await localStorage().set({ [PROVIDERS_KEY]: providers });
+  await localStorage().remove([snapshotKey(id), runtimeStateKey(id)]);
 }
 
 export async function getSnapshot(id: string): Promise<NormalizedSnapshot | null> {
-  const result = await localStorage().get(SNAPSHOTS_KEY);
-  return safeParseSnapshot(result[SNAPSHOTS_KEY]?.[id])
+  const result = await localStorage().get(snapshotKey(id));
+  return safeParseSnapshot(result[snapshotKey(id)]);
 }
 
 export async function setSnapshot(snapshot: NormalizedSnapshot): Promise<void> {
-  const result = await localStorage().get(SNAPSHOTS_KEY);
-  const snapshots = { ...(result[SNAPSHOTS_KEY] ?? {}), [snapshot.providerId]: snapshot };
-  await localStorage().set({ [SNAPSHOTS_KEY]: snapshots });
+  await localStorage().set({ [snapshotKey(snapshot.providerId)]: snapshot });
 }
 
 export async function clearSnapshot(id: string): Promise<void> {
-  const result = await localStorage().get(SNAPSHOTS_KEY);
-  const snapshots = { ...(result[SNAPSHOTS_KEY] ?? {}) };
-  delete snapshots[id];
-  await localStorage().set({ [SNAPSHOTS_KEY]: snapshots });
+  await localStorage().remove(snapshotKey(id));
 }
 
 export async function getRuntimeState(id: string): Promise<ProviderRuntimeState> {
-  const result = await localStorage().get(RUNTIME_KEY);
-  return safeParseRuntimeState(result[RUNTIME_KEY]?.[id]) ?? makeRuntimeState(id);
+  const result = await localStorage().get(runtimeStateKey(id));
+  return safeParseRuntimeState(result[runtimeStateKey(id)]) ?? makeRuntimeState(id);
 }
 
 export async function setRuntimeState(state: ProviderRuntimeState): Promise<void> {
-  const result = await localStorage().get(RUNTIME_KEY);
-  const runtimeStates = { ...(result[RUNTIME_KEY] ?? {}), [state.providerId]: state };
-  await localStorage().set({ [RUNTIME_KEY]: runtimeStates });
+  await localStorage().set({ [runtimeStateKey(state.providerId)]: state });
 }
 
 export async function reorderProviders(ids: string[]): Promise<void> {

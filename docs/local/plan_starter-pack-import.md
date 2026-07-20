@@ -1,6 +1,6 @@
 ---
 type: plan
-status: draft
+status: done
 tags: [starter-pack, import, onboarding, ux, try-samples, usage-guide]
 owner: ishizakahiroshi
 review_status: draft
@@ -10,12 +10,13 @@ related:
   - recap_2026-07-19_many-ai-usage-teach-debug.md
   - pending_user-locale-json-import.md
   - reference_store-submit-split-vs-bulk.md
-last_reviewed: 2026-07-19
-due: 2026-08-02
+last_reviewed: 2026-07-20
 docsweep_policy: archive_with_release
 ---
 
-# [計画] スターターパック取込（UX 優先・固定 URL 一発 + 貼り付け副経路）
+# [完了] スターターパック取込（UX 優先・固定 URL 一発 + 貼り付け副経路）
+
+> 2026-07-20: `src/shared/schema.ts` の `starterPackSchema`/`parseStarterPackResponse`、`src/shared/samples.ts` の `STARTER_PACK_URL`/`fetchStarterPack`、`src/shared/storage.ts` の `applyStarterProviders`、`resources/starter.json` 本体まで実装確認済み。unpacked 実機確認はリリース前の動作確認フェーズで実施。
 
 作成日: 2026-07-19(日)
 

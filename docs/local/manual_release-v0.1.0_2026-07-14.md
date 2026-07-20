@@ -4,7 +4,8 @@ status: in-progress
 version: v0.1.0
 channels: [github-release, chrome-web-store, amo]
 owner: ishizakahiroshi
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-20
+due: 2026-07-21
 ---
 
 # [準備] v0.1.0 リリース
