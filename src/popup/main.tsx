@@ -157,7 +157,10 @@ function ProviderRow({ provider, snapshot, state, reload, t, dragging, onDragSta
           {provider.iconDataUrl
             ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" />
             : null}
-          <span class="provider-name-text">{provider.displayName}</span>
+          <div class="provider-name-copy">
+            <span class="provider-name-text">{provider.displayName}</span>
+            <small class="provider-age">{t('popup.lastUpdated', { value: ageLabel(snapshot?.capturedAt ?? null, t) })}</small>
+          </div>
         </div>
         <div class="windows" style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.min(3, metrics.length))}, minmax(0, 1fr))` }}>
           {metrics.length > 0
@@ -308,7 +311,8 @@ function IssueCard({ provider, snapshot, state, reload, t }: {
 
 function PopupApp() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [openingRefresh, setOpeningRefresh] = useState(true);
+  const [opening, setOpening] = useState(true);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [issuesOpen, setIssuesOpen] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [t, setT] = useState<TranslateFn | null>(null);
@@ -328,12 +332,12 @@ function PopupApp() {
 
   useEffect(() => {
     void (async () => {
-      // The dashboard is useful only when it represents the moment the user opened it.  Wait for
-      // a fresh capture (or a recorded failure) before showing cached values.
-      await sendMessage({ type: 'REFRESH_DASHBOARD' }).catch(() => undefined);
+      // Opening the popup must stay lightweight: users may only want to change a setting, and a
+      // full refresh can need to open or wait for several usage pages.  Show the local snapshot
+      // first; explicit refresh buttons remain available for a fresh capture.
       const next = await sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' });
       setDashboard(next);
-      setOpeningRefresh(false);
+      setOpening(false);
     })();
   }, []);
   useEffect(() => {
@@ -364,6 +368,21 @@ function PopupApp() {
     void setStoredUiLocale(code).then(() => applyI18n());
   };
 
+  const refreshAll = () => {
+    setRefreshingAll(true);
+    void (async () => {
+      try {
+        await sendMessage({ type: 'REFRESH_DASHBOARD' });
+        const next = await sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' });
+        setDashboard(next);
+      } catch {
+        // Keep the last local snapshot visible if a background refresh cannot start.
+      } finally {
+        setRefreshingAll(false);
+      }
+    })();
+  };
+
   const reorder = async (fromId: string, toId: string) => {
     if (fromId === toId || !dashboard) return;
     // Full provider list (same contract as options) so issue rows keep relative order.
@@ -378,7 +397,7 @@ function PopupApp() {
     reload();
   };
 
-  if (openingRefresh || !dashboard || !t) return <div class="popup-shell loading">{t?.('popup.loading') ?? t?.('common.loading') ?? 'Loading…'}</div>;
+  if (opening || !dashboard || !t) return <div class="popup-shell loading">{t?.('popup.loading') ?? t?.('common.loading') ?? 'Loading…'}</div>;
   const normal = dashboard.providers.filter((provider) => {
     const state = dashboard.runtimeStates[provider.id];
     const snapshot = dashboard.snapshots[provider.id];
@@ -395,6 +414,13 @@ function PopupApp() {
           <span>v0.1.0</span>
         </div>
         <div class="header-actions">
+          <button
+            class="refresh-all-button"
+            type="button"
+            disabled={refreshingAll}
+            onClick={refreshAll}
+            title={t('popup.refreshAll')}
+          >{refreshingAll ? t('popup.refreshingAll') : t('popup.refreshAll')}</button>
           <label class="locale-select-wrap">
             <span class="visually-hidden">{t('common.language')}</span>
             <select
@@ -408,6 +434,13 @@ function PopupApp() {
               ))}
             </select>
           </label>
+          <button
+            type="button"
+            class="text-button report-header-button"
+            onClick={() => {
+              void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?report=1'), active: true });
+            }}
+          >{t('report.link')}</button>
           <button class="text-button" onClick={() => openOptions()}>⚙ {t('common.options')}</button>
         </div>
       </header>
@@ -462,11 +495,6 @@ function PopupApp() {
           )}
         </section>
       )}
-      <footer class="popup-footer">
-        <button type="button" class="text-button footer-link" onClick={() => {
-          void chrome.tabs.create({ url: chrome.runtime.getURL('options.html?report=1'), active: true });
-        }}>{t('report.link')}</button>
-      </footer>
     </div>
   );
 }
