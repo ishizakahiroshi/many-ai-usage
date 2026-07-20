@@ -31,6 +31,13 @@ let lastHandledEventStamp = 0;
 let statusHint: string | null = null;
 let savingResetTimer: ReturnType<typeof setTimeout> | null = null;
 /**
+ * When true, page capture / orange marker / hover tooltip are off so the user can
+ * select/copy on the page. Saved metrics stay; panel Cancel/Done/Esc still work.
+ */
+let pickerPaused = false;
+/** Idempotent attach/detach for window capture listeners (not Esc). */
+let captureListenersAttached = false;
+/**
  * Last element that produced a tooltip value on hover.
  * Click hit-testing can miss under popover top-layer / SPA pointer capture;
  * staging uses this when the click is near the hover point (Codex/ChatGPT).
@@ -687,18 +694,91 @@ export function liveResetForElement(element: Element, now = Date.now()): { reset
   return { resetLabel: live.resetLabel, resetAt: live.resetAt };
 }
 
+function defaultHintText(): string {
+  if (pickerPaused) {
+    return 'Paused — page is free to select/copy. Resume to teach more.';
+  }
+  if (activePickerMode === 'reset') {
+    return 'Click the reset date or countdown for this metric.';
+  }
+  return savedMetrics.length === 0
+    ? 'Click a usage number on the page. Then press Done and return.'
+    : 'Rename if needed, then press Done and return.';
+}
+
 function setStatusHint(message: string | null): void {
   statusHint = message;
   if (!panel) return;
   const hint = panel.querySelector('[data-hint]');
   if (!hint) return;
-  if (message) {
-    hint.textContent = message;
+  hint.textContent = message ?? defaultHintText();
+}
+
+function syncPauseUi(): void {
+  if (!panel) return;
+  const pauseBtn = panel.querySelector<HTMLButtonElement>('[data-action="pause"]');
+  if (pauseBtn) {
+    pauseBtn.textContent = pickerPaused ? 'Resume teaching' : 'Pause page';
+    pauseBtn.setAttribute('aria-pressed', pickerPaused ? 'true' : 'false');
+  }
+  panel.dataset.paused = pickerPaused ? 'true' : 'false';
+}
+
+function applyPickerCursor(teaching: boolean): void {
+  const cursor = teaching ? 'crosshair' : '';
+  document.body.style.cursor = cursor;
+  if (pickerHost) pickerHost.style.cursor = teaching ? 'crosshair' : 'default';
+  const surface = pickerHost?.firstElementChild as HTMLElement | null;
+  if (surface) surface.style.cursor = teaching ? 'crosshair' : 'default';
+}
+
+/** Attach page capture listeners (mousemove + select). Idempotent. */
+function attachPageCapture(): void {
+  if (captureListenersAttached) return;
+  window.addEventListener('mousemove', onMove, true);
+  window.addEventListener('pointerdown', onPointerDown, true);
+  window.addEventListener('pointerup', onPointerUp, true);
+  window.addEventListener('click', onClick, true);
+  captureListenersAttached = true;
+}
+
+/** Detach page capture listeners so the page can be used normally. Idempotent. */
+function detachPageCapture(): void {
+  if (!captureListenersAttached) return;
+  window.removeEventListener('mousemove', onMove, true);
+  window.removeEventListener('pointerdown', onPointerDown, true);
+  window.removeEventListener('pointerup', onPointerUp, true);
+  window.removeEventListener('click', onClick, true);
+  captureListenersAttached = false;
+}
+
+/**
+ * Pause: free the page for select/copy. Resume: restore Continuous teach capture.
+ * Does not discard Saved metrics. Cancel / Esc / Done remain available either way.
+ */
+function setPickerPaused(next: boolean): void {
+  if (!activeProviderId || !pickerHost) return;
+  if (pickerPaused === next) {
+    syncPauseUi();
     return;
   }
-  hint.textContent = savedMetrics.length === 0
-    ? 'Click a usage number on the page. Then press Done and return.'
-    : 'Rename if needed, then press Done and return.';
+  pickerPaused = next;
+  if (next) {
+    detachPageCapture();
+    setHighlight(null);
+    if (tooltip) tooltip.style.display = 'none';
+    lastHoverHit = null;
+    statusHint = null;
+    applyPickerCursor(false);
+    obsLog('picker.pause', { saved: savedMetrics.length });
+  } else {
+    attachPageCapture();
+    applyPickerCursor(true);
+    statusHint = null;
+    obsLog('picker.resume', { saved: savedMetrics.length });
+  }
+  syncPauseUi();
+  setStatusHint(null);
 }
 
 function renderPanel(): void {
@@ -709,6 +789,7 @@ function renderPanel(): void {
   if (!list || !count) return;
   count.textContent = `Saved: ${savedMetrics.length}`;
   if (done) done.disabled = savedMetrics.length === 0;
+  syncPauseUi();
   setStatusHint(statusHint);
   list.replaceChildren(...savedMetrics.map((metric) => {
     const row = document.createElement('div');
@@ -785,6 +866,10 @@ async function panelClick(event: Event): Promise<void> {
   const button = (event.target as Element | null)?.closest<HTMLButtonElement>('button[data-action]');
   if (!button || !activeProviderId) return;
   const action = button.dataset.action;
+  if (action === 'pause') {
+    setPickerPaused(!pickerPaused);
+    return;
+  }
   if (action === 'done') return finishPicker();
   if (action === 'cancel') return cancelPicker();
   if (action === 'rename-cancel') {
@@ -815,6 +900,7 @@ async function panelClick(event: Event): Promise<void> {
 }
 
 function onMove(event: MouseEvent): void {
+  if (pickerPaused) return;
   if (isPanelEvent(event)) {
     setHighlight(null);
     if (tooltip) tooltip.style.display = 'none';
@@ -1038,7 +1124,7 @@ function selectAtPoint(clientX: number, clientY: number): void {
 }
 
 function shouldIgnoreSelectEvent(event: Event): boolean {
-  if (!pickerHost || saving || !activeProviderId || isPanelEvent(event)) return true;
+  if (!pickerHost || saving || !activeProviderId || pickerPaused || isPanelEvent(event)) return true;
   const stamp = event.timeStamp || Date.now();
   // window + host both listen in capture — handle each physical gesture once.
   if (stamp > 0 && stamp === lastHandledEventStamp) return true;
@@ -1047,7 +1133,7 @@ function shouldIgnoreSelectEvent(event: Event): boolean {
 }
 
 function onPointerDown(event: PointerEvent): void {
-  if (shouldIgnoreSelectEvent(event)) return;
+  if (pickerPaused || shouldIgnoreSelectEvent(event)) return;
   // Primary path: many SPAs (incl. ChatGPT/Codex) consume pointerdown and never emit click.
   if (event.button != null && event.button !== 0) return;
   event.preventDefault();
@@ -1058,7 +1144,7 @@ function onPointerDown(event: PointerEvent): void {
 
 /** Some SPAs swallow pointerdown but still deliver pointerup / click. */
 function onPointerUp(event: PointerEvent): void {
-  if (!pickerHost || saving || !activeProviderId || isPanelEvent(event)) return;
+  if (!pickerHost || saving || !activeProviderId || pickerPaused || isPanelEvent(event)) return;
   if (event.button != null && event.button !== 0) return;
   if (isDuplicateSelectGesture(event.clientX, event.clientY)) return;
   // Only act when pointerdown did not already stage (same coordinates within window).
@@ -1072,7 +1158,7 @@ function onPointerUp(event: PointerEvent): void {
 }
 
 function onClick(event: MouseEvent): void {
-  if (!pickerHost || saving || !activeProviderId || isPanelEvent(event)) return;
+  if (!pickerHost || saving || !activeProviderId || pickerPaused || isPanelEvent(event)) return;
   // Fallback when pointerdown did not run (keyboard activation, older engines).
   if (isDuplicateSelectGesture(event.clientX, event.clientY)) {
     event.preventDefault();
@@ -1212,10 +1298,7 @@ export function stopPicker(): void {
   }
   lastHoverDiagAt = 0;
   lastHoverDiagKey = '';
-  window.removeEventListener('mousemove', onMove, true);
-  window.removeEventListener('pointerdown', onPointerDown, true);
-  window.removeEventListener('pointerup', onPointerUp, true);
-  window.removeEventListener('click', onClick, true);
+  detachPageCapture();
   window.removeEventListener('keydown', onKeydown, true);
   pickerHost?.removeEventListener('pointerdown', onPointerDown, true);
   pickerHost?.removeEventListener('pointerup', onPointerUp, true);
@@ -1259,6 +1342,8 @@ export function stopPicker(): void {
   lastHandledEventStamp = 0;
   lastHoverHit = null;
   statusHint = null;
+  pickerPaused = false;
+  captureListenersAttached = false;
   document.body.style.cursor = '';
 }
 
@@ -1343,15 +1428,18 @@ export function startPicker(providerId: string, metricId?: string, pickerMode: '
     .metric-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 6px; align-items: center; padding: 7px; border-radius: 7px; background: #f1f5f9; color: #172033; }
     .metric-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .metric-row input { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; font: inherit; color: #172033; background: #fff; }
-    .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .actions [data-action="pause"] { margin-right: auto; }
     button { border: 1px solid #cbd5e1; border-radius: 7px; padding: 6px 9px; background: #fff; color: #172033; cursor: pointer; font: inherit; }
     button.primary { border-color: #ea580c; background: #f97316; color: #fff; } button.primary:disabled { opacity: .5; cursor: not-allowed; }
+    .panel[data-paused="true"] [data-action="pause"] { border-color: #0d9488; background: #ccfbf1; color: #134e4a; }
   `;
   tooltip = document.createElement('div');
   tooltip.className = 'tooltip';
   panel = document.createElement('div');
   panel.className = 'panel';
-  panel.innerHTML = `<h2>many-ai-usage teaching</h2><p data-hint>${pickerMode === 'reset' ? 'Click the reset date or countdown for this metric.' : 'Click the big total (e.g. 使用済). Avoid small legend chips.'}</p><div class="count" data-count>Saved: 0</div><div class="list" data-list></div><div class="actions"><button type="button" data-action="cancel">Cancel</button><button type="button" class="primary" data-action="done" disabled>Done and return</button></div>`;
+  panel.dataset.paused = 'false';
+  panel.innerHTML = `<h2>many-ai-usage teaching</h2><p data-hint>${pickerMode === 'reset' ? 'Click the reset date or countdown for this metric.' : 'Click the big total (e.g. 使用済). Avoid small legend chips.'}</p><div class="count" data-count>Saved: 0</div><div class="list" data-list></div><div class="actions"><button type="button" data-action="pause" aria-pressed="false">Pause page</button><button type="button" data-action="cancel">Cancel</button><button type="button" class="primary" data-action="done" disabled>Done and return</button></div>`;
   panel.addEventListener('click', (event) => void panelClick(event));
   panel.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
@@ -1370,18 +1458,21 @@ export function startPicker(providerId: string, metricId?: string, pickerMode: '
   shadow.append(style, highlightBox, tooltip, panel);
   pickerShadowRoot = shadow;
   pickerHost = shell;
+  pickerPaused = false;
+  captureListenersAttached = false;
   document.documentElement.append(shell);
   promoteToTopLayer(shell);
   renderPanel();
-  document.body.style.cursor = 'crosshair';
-  // Window capture: host is pointer-events none, so page events still reach the window.
-  window.addEventListener('mousemove', onMove, true);
-  window.addEventListener('pointerdown', onPointerDown, true);
-  window.addEventListener('pointerup', onPointerUp, true);
-  window.addEventListener('click', onClick, true);
+  applyPickerCursor(true);
+  // Esc stays on for Cancel during Pause; page capture is attached only while teaching.
   window.addEventListener('keydown', onKeydown, true);
+  attachPageCapture();
 }
 
 export function isPickerActive(): boolean {
   return pickerHost != null;
+}
+
+export function isPickerPaused(): boolean {
+  return pickerPaused;
 }

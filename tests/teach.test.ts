@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAnchorFingerprint } from '../src/content/teach/selector';
 import { extractValue } from '../src/content/teach/extract';
 import { readTaught } from '../src/content/teach/read';
-import { isPickerActive, makeMetric, startPicker, stopPicker } from '../src/content/teach/picker';
+import { isPickerActive, isPickerPaused, makeMetric, startPicker, stopPicker } from '../src/content/teach/picker';
 import type { ProviderConfig } from '../src/shared/schema';
 
 function pickerShadow(): ShadowRoot | null | undefined {
@@ -423,17 +423,24 @@ describe('teach-mode pure functions', () => {
     });
     (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
     // Swallow click entirely — only pointerdown reaches the page (common SPA pattern).
-    document.addEventListener('click', (event) => event.stopImmediatePropagation(), true);
-    startPicker('fixture:pointerdown');
-    // jsdom lacks PointerEvent; MouseEvent with type pointerdown is enough for our handler.
-    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 12, clientY: 14, button: 0 }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
-    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'SAVE_METRIC' }));
-    // Trailing click must not double-stage the same gesture.
-    window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 12, clientY: 14 }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(staged).toHaveLength(1);
+    const swallowClick = (event: Event) => {
+      event.stopImmediatePropagation();
+    };
+    document.addEventListener('click', swallowClick, true);
+    try {
+      startPicker('fixture:pointerdown');
+      // jsdom lacks PointerEvent; MouseEvent with type pointerdown is enough for our handler.
+      window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 12, clientY: 14, button: 0 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'SAVE_METRIC' }));
+      // Trailing click must not double-stage the same gesture.
+      window.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: 12, clientY: 14 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(staged).toHaveLength(1);
+    } finally {
+      document.removeEventListener('click', swallowClick, true);
+    }
   });
 
   it('shows a status hint when the hit element has no usage number', async () => {
@@ -465,6 +472,106 @@ describe('teach-mode pure functions', () => {
     window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 42, clientY: 52, button: 0 }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+    expect(staged).toHaveLength(1);
+  });
+
+  it('pauses page capture without discarding Saved, then resumes teaching', async () => {
+    document.body.innerHTML = '<section><p id="weekly">62% remaining</p><p id="credits">18 credits remaining</p></section>';
+    mockHitTarget(() => document.querySelector('#weekly'));
+    const staged: ProviderConfig['metrics'] = [];
+    const sendMessage = vi.fn(async (message: { type: string; metric?: ProviderConfig['metrics'][number] }) => {
+      if (message.type === 'SAVE_METRIC' && message.metric) staged.push(message.metric);
+      return { saved: true, metrics: [...staged] };
+    });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
+    startPicker('fixture:pause');
+    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 10, clientY: 10, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+    expect(isPickerPaused()).toBe(false);
+
+    const pauseBtn = pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="pause"]');
+    expect(pauseBtn?.textContent).toMatch(/Pause page/i);
+    pauseBtn?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(isPickerPaused()).toBe(true);
+    expect(isPickerActive()).toBe(true);
+    expect(pickerShadow()?.querySelector('[data-hint]')?.textContent).toMatch(/Paused/i);
+    expect(pickerShadow()?.querySelector('[data-action="pause"]')?.textContent).toMatch(/Resume teaching/i);
+
+    // While paused, pointer select must not stage another metric.
+    mockHitTarget(() => document.querySelector('#credits'));
+    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 40, clientY: 40, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(staged).toHaveLength(1);
+    expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+
+    // Resume restores capture; Saved stays.
+    pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="pause"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(isPickerPaused()).toBe(false);
+    expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 1');
+    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 40, clientY: 40, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(staged).toHaveLength(2);
+    expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 2');
+  });
+
+  it('allows Done and Escape while paused', async () => {
+    document.body.innerHTML = '<p id="weekly">62% remaining</p>';
+    mockHitTarget(() => document.querySelector('#weekly'));
+    const sendMessage = vi.fn(async (message: { type: string; metric?: ProviderConfig['metrics'][number] }) => {
+      if (message.type === 'SAVE_METRIC' && message.metric) return { saved: true, metrics: [message.metric] };
+      return {};
+    });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
+    startPicker('fixture:pause-done');
+    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 10, clientY: 10, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="pause"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(isPickerPaused()).toBe(true);
+    expect(pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="done"]')?.disabled).toBe(false);
+    pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="done"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'DONE_TEACH', providerId: 'fixture:pause-done' });
+    expect(isPickerActive()).toBe(false);
+
+    // Esc while paused still cancels the session.
+    startPicker('fixture:pause-esc');
+    pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="pause"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(isPickerPaused()).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'CANCEL_TEACH', providerId: 'fixture:pause-esc' });
+    expect(isPickerActive()).toBe(false);
+  });
+
+  it('pause toggle is idempotent under double-click', async () => {
+    document.body.innerHTML = '<p id="weekly">62% remaining</p>';
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage: vi.fn() } };
+    startPicker('fixture:pause-idempotent');
+    const btn = pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="pause"]');
+    btn?.click();
+    btn?.click();
+    btn?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // 3 clicks: pause → resume → pause
+    expect(isPickerPaused()).toBe(true);
+    expect(pickerShadow()?.querySelector('[data-action="pause"]')?.textContent).toMatch(/Resume teaching/i);
+    // Resume once more; capture must work (no double-listener staging).
+    mockHitTarget(() => document.querySelector('#weekly'));
+    const staged: ProviderConfig['metrics'] = [];
+    const sendMessage = vi.fn(async (message: { type: string; metric?: ProviderConfig['metrics'][number] }) => {
+      if (message.type === 'SAVE_METRIC' && message.metric) staged.push(message.metric);
+      return { saved: true, metrics: [...staged] };
+    });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
+    pickerShadow()?.querySelector<HTMLButtonElement>('[data-action="pause"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    window.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true, clientX: 10, clientY: 10, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(staged).toHaveLength(1);
   });
 });

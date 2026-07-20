@@ -234,6 +234,7 @@ docsweep_policy: archive_with_release
       </ul>
     </div>
     <div class="hint"><b>キャンセル確認:</b> もう一度 Track this element を開始して 1 metric を選び、Esc を押す。options に戻った後、Tracked elements が増えていなければ全破棄も成功。</div>
+    <div class="hint"><b>Pause（一時停止）:</b> teach 中にページ上の説明文や数値をコピーしたいとき、panel の <b>Pause page</b> を押す。オレンジ marker とクリック横取りが外れ、通常どおり選択・コピーできる。Saved 一覧は保持される。<b>Resume teaching</b> で teach に戻る。Pause 中でも Done（Saved≥1）や Cancel / Esc は使える。metric 追加は Resume 後。</div>
     <div class="hint"><b>Claude で試す場合:</b> 登録 URL を <code>https://claude.ai/new#settings/usage</code> にし、ログイン済みで % が見えてから Track。セッション／週間など複数 metric を Continuous で teach できる。</div>
     <div class="hint"><b>Grok でマーカーがおかしいとき:</b> 枠がサイドバーまで伸びる・ツールチップが変な数値（例: 4.5）→ usage タブで <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">R</span>（スーパーリロード）してから Track し直す。SPA + content script の半端状態で起きやすい。</div>
   </div>
@@ -280,6 +281,7 @@ docsweep_policy: archive_with_release
         <tr><td>Claude が upgrade / 真っ黒 / 使い物にならない</td><td>登録 URL が <code>/settings/usage</code></td><td>options で <code>https://claude.ai/new#settings/usage</code> に変更。ログイン済みか確認</td></tr>
         <tr><td>Grok が薄いアカウント UI だけ</td><td>未ログイン</td><td>サインイン後に <code>?_s=usage</code> を開き直す（拡張の無限リダイレクトではない）</td></tr>
         <tr><td>teach マーカーがサイドバーまで伸びる・変な数値</td><td>Grok SPA の半端な DOM / inject 状態</td><td>usage タブをスーパーリロード（<span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">R</span>）して再 Track</td></tr>
+        <tr><td>teach 中にページの文字をコピーできない</td><td>capture がクリックを横取り</td><td>panel の <b>Pause page</b> → コピー → <b>Resume teaching</b></td></tr>
         <tr><td>Firefox で拡張が消えた</td><td>一時アドオンの仕様</td><td><code>manifest.json</code> を再度読み込む</td></tr>
         <tr><td>ソースを直したのに挙動が古い</td><td>dist 未 build / 拡張未リロード</td><td><code>pnpm run build:firefox</code>（or chrome）→ 再読み込み</td></tr>
       </tbody>

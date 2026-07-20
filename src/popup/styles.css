@@ -55,7 +55,22 @@ button:hover { border-color: #9ca3af; background: #f9fafb; }
 .provider-list { padding: 8px 12px; }
 .provider-row { border-bottom: 1px solid var(--line); }
 .provider-row.expanded { background: #fff7ed; }
-.row-main { display: grid; grid-template-columns: 82px minmax(0, 1fr) 30px 30px; gap: 7px; align-items: center; min-height: 52px; }
+.provider-row.dragging { opacity: .55; }
+.row-main { display: grid; grid-template-columns: 14px 70px minmax(0, 1fr) 30px 30px; gap: 7px; align-items: center; min-height: 52px; }
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  color: #9ca3af;
+  font-size: 11px;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.drag-handle:active { cursor: grabbing; }
+.drag-handle:hover { color: var(--muted); }
 .provider-name { display: flex; align-items: center; gap: 7px; min-width: 0; font-weight: 650; }
 .provider-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .provider-icon { width: 18px; height: 18px; flex: 0 0 auto; border-radius: 4px; object-fit: cover; background: #e5e7eb; }
@@ -72,7 +87,7 @@ button:hover { border-color: #9ca3af; background: #f9fafb; }
 .reset-label { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .icon-button { width: 28px; height: 28px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 17px; }
 .empty-value { color: var(--muted); font-size: 12px; }
-.row-details { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 2px 0 12px 89px; color: var(--muted); font-size: 11px; }
+.row-details { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 2px 0 12px 105px; color: var(--muted); font-size: 11px; }
 .row-actions { display: flex; gap: 6px; width: 100%; margin-top: 3px; }.row-actions button { padding: 4px 7px; font-size: 11px; }
 .empty-state { display: grid; gap: 3px; padding: 30px 12px; color: var(--muted); text-align: center; }.empty-state strong { color: var(--ink); }
 .empty-actions { display: flex; justify-content: center; gap: 7px; margin-top: 10px; }.empty-actions button { padding: 7px 10px; }.empty-actions .sample-button { border-color: #c2410c; background: var(--accent); color: white; font-weight: 650; }
