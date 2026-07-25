@@ -42,7 +42,7 @@ Suggested category: Productivity
 - `screenshot-picker.png`: Track this element highlight with the value preview tooltip
 - `screenshot-settings.png`: Re-teach needed card and the options page taught metric list
 
-These images are synthetic-data screenshots generated from `docs/local/design_teach-mode-store-screens_2026-07-14.html`. They contain no real service UI, logos, or account information.
+These images are synthetic-data screenshots generated from `docs/store/design_teach-mode-store-screens_2026-07-14.html`. They contain no real service UI, logos, or account information.
 
 ## Store listing URLs (fill in the developer console)
 
