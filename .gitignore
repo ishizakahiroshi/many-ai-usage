@@ -27,6 +27,10 @@ desktop.ini
 # === AI ツールのローカル状態（トークンを含む可能性あり） ===
 .claude/
 .codex-tmp/
+# many-ai-cli が opencode セッション中だけ cwd に書く permission 設定と排他ロック
+# (opencode.json.many-ai-cli.lock)。セッションが kill されると置き去りになる。
+# 完全一致だと lock 側が漏れるため前方一致で拾う。
+opencode.json*
 
 # === ツール生成キャッシュ（アカウント ID 等の識別子を含み得る・追跡しない） ===
 .wrangler/
