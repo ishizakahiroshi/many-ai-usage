@@ -115,6 +115,7 @@
   "options.reteachValue": "値を再教示",
   "options.reteachReset": "リセットを再教示",
   "options.accountTitle": "アカウント（同じサービスを複数登録するとき）",
+  "options.accountSteps": "同じサービスを複数のアカウントで見るときの手順です。1 この枠を複製する → 2 それぞれにアカウント名を付ける → 3 それぞれで usage ページを開きアカウントを教える。1 アカウントだけで使うなら、この欄は触らなくて構いません。",
   "options.accountLabel": "アカウント名",
   "options.accountLabelPlaceholder": "例: 個人 / 仕事",
   "options.accountLabelHelp": "同じ usage ページを複数のアカウントで登録するときに、一覧の行へ出す名前です。",
