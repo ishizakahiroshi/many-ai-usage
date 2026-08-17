@@ -680,7 +680,9 @@ function OptionsApp() {
               {selectedProvider && <div class="teach-panel account-panel">
                 <div>
                   <strong>{t('options.accountTitle')}</strong>
-                  <p class="help-text">{t('options.teachAccountHelp')}</p>
+                  {/* Steps first: the section used to open with "click the text that identifies
+                      this account", which is step 3 — unusable before the entry is duplicated. */}
+                  <p class="help-text account-steps">{t('options.accountSteps')}</p>
                   <label class="account-label-field">{t('options.accountLabel')}
                     <input
                       value={draft.accountLabel ?? ''}
@@ -693,6 +695,7 @@ function OptionsApp() {
                   <span class={`account-state ${selectedProvider.accountKeyHash ? 'is-set' : ''}`}>
                     {selectedProvider.accountKeyHash ? t('options.accountTaught') : t('options.accountNotTaught')}
                   </span>
+                  <p class="help-text">{t('options.teachAccountHelp')}</p>
                   {accountIdentityMissing && <p class="account-warning" role="alert">{t('options.sharedUrlWarning')}</p>}
                   {isFirefox() && (containersEnabled
                     ? <>
@@ -711,9 +714,11 @@ function OptionsApp() {
                     </>
                     : <button type="button" onClick={() => void enableContainers()}>{t('options.containerEnable')}</button>)}
                 </div>
+                {/* Duplicate first — it is step 1, and teaching an account is pointless until
+                    there are two entries to tell apart. */}
                 <div class="teach-panel-actions">
-                  <button class="primary-button" onClick={() => void trackSelected(undefined, 'account')}>{t('options.teachAccount')}</button>
                   <button type="button" onClick={() => void duplicateForAccount()}>{t('options.duplicateForAccount')}</button>
+                  <button class="primary-button" onClick={() => void trackSelected(undefined, 'account')}>{t('options.teachAccount')}</button>
                 </div>
               </div>}
               {selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics">

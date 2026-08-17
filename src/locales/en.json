@@ -115,6 +115,7 @@
   "options.reteachValue": "Re-teach value",
   "options.reteachReset": "Re-teach reset",
   "options.accountTitle": "Account (when one service is registered more than once)",
+  "options.accountSteps": "To watch one service with several accounts: 1 duplicate this entry, 2 give each one an account name, 3 open the usage page from each and teach the account. With a single account you can ignore this section.",
   "options.accountLabel": "Account name",
   "options.accountLabelPlaceholder": "e.g. personal / work",
   "options.accountLabelHelp": "Shown as the row label when the same usage page is registered with several accounts.",
