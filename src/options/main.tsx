@@ -1,8 +1,15 @@
 import { render } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { DashboardResponse } from '../shared/messages';
+import type { DashboardResponse, PickerMode } from '../shared/messages';
 import { ageLabel, formatMetric, remainingPercent, statusLabel } from '../shared/format';
 import { fileToIconDataUrl } from '../shared/icon';
+import {
+  hasContainerPermission,
+  isFirefox,
+  listContainers,
+  requestContainerPermission,
+  type ContainerIdentity,
+} from '../shared/containers';
 import type { ProviderConfig, ProviderMode, TaughtMetric } from '../shared/schema';
 import {
   initI18n,
@@ -17,18 +24,33 @@ import { fetchStarterPack, isSampleProviderId, parseStarterPackText, STARTER_PAC
 import { applyStarterProviders } from '../shared/storage';
 import { obsLog, perfLog, perfNow } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
-import { originChanged, originPattern, urlWithoutHash } from '../shared/url';
+import { originChanged, originPattern, sameOriginAndPath, urlWithoutHash } from '../shared/url';
 import './styles.css';
 
-type ProviderDraft = Pick<ProviderConfig, 'id' | 'displayName' | 'url' | 'refreshIntervalMinutes' | 'mode' | 'order' | 'createdAt' | 'updatedAt' | 'iconDataUrl'>;
+type ProviderDraft = Pick<
+  ProviderConfig,
+  'id' | 'displayName' | 'url' | 'refreshIntervalMinutes' | 'mode' | 'order' | 'createdAt' | 'updatedAt' | 'iconDataUrl' | 'accountLabel' | 'cookieStoreId'
+>;
 
 function blankDraft(order = 0): ProviderDraft {
-  return { id: '', displayName: '', url: '', refreshIntervalMinutes: 15, mode: 'auto', order, createdAt: '', updatedAt: '', iconDataUrl: undefined };
+  return {
+    id: '',
+    displayName: '',
+    url: '',
+    refreshIntervalMinutes: 15,
+    mode: 'auto',
+    order,
+    createdAt: '',
+    updatedAt: '',
+    iconDataUrl: undefined,
+    accountLabel: undefined,
+    cookieStoreId: undefined,
+  };
 }
 
 function draftFrom(provider: ProviderConfig): ProviderDraft {
-  const { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt, iconDataUrl } = provider;
-  return { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt, iconDataUrl };
+  const { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt, iconDataUrl, accountLabel, cookieStoreId } = provider;
+  return { id, displayName, url, refreshIntervalMinutes, mode, order, createdAt, updatedAt, iconDataUrl, accountLabel, cookieStoreId };
 }
 
 function validUrl(value: string): boolean {
@@ -81,6 +103,8 @@ function OptionsApp() {
   const [t, setT] = useState<TranslateFn | null>(null);
   const [locale, setLocale] = useState('en');
   const [catalog, setCatalog] = useState<LocaleCatalog | null>(null);
+  const [containers, setContainers] = useState<ContainerIdentity[]>([]);
+  const [containersEnabled, setContainersEnabled] = useState(false);
 
   const reload = () => {
     const startedAt = perfNow();
@@ -139,6 +163,14 @@ function OptionsApp() {
     reload();
   }, []);
   useEffect(() => {
+    // Containers are Firefox-only and opt-in: nothing is shown until the permission is granted.
+    void (async () => {
+      if (!isFirefox() || !(await hasContainerPermission())) return;
+      setContainersEnabled(true);
+      setContainers(await listContainers());
+    })();
+  }, []);
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     // Strip one-shot launch params so reload/bookmark does not keep forcing selection/dialog.
     if (params.has('trySamples') || params.has('importStarter') || params.has('provider') || params.has('report')) {
@@ -172,6 +204,16 @@ function OptionsApp() {
   const selectedSnapshot = selectedProvider && dashboard ? dashboard.snapshots[selectedProvider.id] : null;
   const selectedState = selectedProvider && dashboard ? dashboard.runtimeStates[selectedProvider.id] : null;
   const showTrySamples = dashboard ? !dashboard.providers.some((provider) => isSampleProviderId(provider.id)) : false;
+  /** Other entries registered for the same page — i.e. the same service with another account. */
+  const sharedUrlSiblings = useMemo(() => {
+    if (!dashboard || !selectedProvider) return [] as ProviderConfig[];
+    return dashboard.providers.filter((provider) => provider.id !== selectedProvider.id
+      && sameOriginAndPath(provider.url, selectedProvider.url));
+  }, [dashboard, selectedProvider]);
+  // Without an identity or a container, a refresh cannot tell this entry from its siblings.
+  const accountIdentityMissing = sharedUrlSiblings.length > 0
+    && !selectedProvider?.accountKeyHash
+    && !selectedProvider?.cookieStoreId;
 
   const select = (id: string | 'new') => {
     if (!t) return;
@@ -214,6 +256,11 @@ function OptionsApp() {
       refreshIntervalMinutes: Math.max(3, Math.min(240, Number(draft.refreshIntervalMinutes) || 15)),
       metrics: existing?.metrics ?? [],
       ...(draft.iconDataUrl ? { iconDataUrl: draft.iconDataUrl } : {}),
+      ...(draft.accountLabel?.trim() ? { accountLabel: draft.accountLabel.trim() } : {}),
+      ...(draft.cookieStoreId ? { cookieStoreId: draft.cookieStoreId } : {}),
+      // The account identity is taught, not typed — carry it across ordinary saves.
+      ...(existing?.accountAnchor ? { accountAnchor: existing.accountAnchor } : {}),
+      ...(existing?.accountKeyHash ? { accountKeyHash: existing.accountKeyHash } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       order: existing?.order ?? draft.order,
@@ -242,7 +289,7 @@ function OptionsApp() {
     reload();
   };
 
-  const trackSelected = async (metricId?: string, pickerMode: 'metrics' | 'reset' = 'metrics', resetFirst = false) => {
+  const trackSelected = async (metricId?: string, pickerMode: PickerMode = 'metrics', resetFirst = false) => {
     if (!t || !selectedProvider) return;
     let granted = await permissionFor(selectedProvider.url);
     if (!granted) {
@@ -266,7 +313,11 @@ function OptionsApp() {
       await sendMessage({ type: 'RESET_TEACH', providerId: selectedProvider.id });
       reload();
     }
-    setMessage(pickerMode === 'reset' ? t('options.msgStartTeachReset') : t('options.msgStartTeach'));
+    setMessage(pickerMode === 'reset'
+      ? t('options.msgStartTeachReset')
+      : pickerMode === 'account'
+        ? t('options.msgAccountTeachStart')
+        : t('options.msgStartTeach'));
     const result = await sendMessage<{ started?: boolean; reason?: string }>({
       type: 'START_PICKER',
       providerId: selectedProvider.id,
@@ -282,7 +333,49 @@ function OptionsApp() {
       setMessage(detail);
       return;
     }
-    setMessage(pickerMode === 'reset' ? t('options.msgTeachReadyReset') : t('options.msgTeachReady'));
+    setMessage(pickerMode === 'reset'
+      ? t('options.msgTeachReadyReset')
+      : pickerMode === 'account'
+        ? t('options.msgAccountTeachReady')
+        : t('options.msgTeachReady'));
+  };
+
+  /**
+   * Register the same usage page a second time for another account.
+   * Metrics and icon are reused (same service, same layout); the identity and container are
+   * intentionally dropped so the copy cannot claim the original account's readings.
+   */
+  const duplicateForAccount = async () => {
+    if (!t || !selectedProvider || !dashboard) return;
+    if (!window.confirm(t('options.duplicateConfirm', { name: selectedProvider.displayName }))) return;
+    const now = new Date().toISOString();
+    const copy: ProviderConfig = {
+      ...selectedProvider,
+      id: `custom:${crypto.randomUUID?.() ?? Date.now()}`,
+      accountLabel: undefined,
+      accountAnchor: undefined,
+      accountKeyHash: undefined,
+      cookieStoreId: undefined,
+      createdAt: now,
+      updatedAt: now,
+      order: dashboard.providers.length,
+    };
+    await sendMessage({ type: 'UPSERT_PROVIDER', provider: copy, permissionGranted: await permissionFor(copy.url) });
+    setSelectedId(copy.id);
+    setDraft(draftFrom(copy));
+    setDirty(false);
+    setMessage(t('options.msgDuplicated'));
+    reload();
+  };
+
+  const enableContainers = async () => {
+    if (!t) return;
+    if (!(await requestContainerPermission())) {
+      setMessage(t('options.msgContainerDenied'));
+      return;
+    }
+    setContainersEnabled(true);
+    setContainers(await listContainers());
   };
 
   const onIconFile = async (file: File | null) => {
@@ -584,6 +677,45 @@ function OptionsApp() {
                 <label>{t('options.mode')}<select value={draft.mode} onChange={(event) => updateDraft('mode', event.currentTarget.value as ProviderMode)}><option value="auto">{t('options.modeAuto')}</option><option value="taught">{t('options.modeTaught')}</option><option value="embed">{t('options.modeEmbed')}</option></select></label>
               </div>
               {selectedProvider && <div class="teach-panel"><div><strong>{t('options.teachTitle')}</strong><p class="help-text">{t('options.teachHelp')}</p></div><div class="teach-panel-actions"><button class="primary-button" onClick={() => void trackSelected()}>{t('options.trackElement')}</button>{selectedProvider.metrics.length > 0 && <button class="primary-button" onClick={() => void trackSelected(undefined, 'metrics', true)}>{t('options.fixTracking')}</button>}</div></div>}
+              {selectedProvider && <div class="teach-panel account-panel">
+                <div>
+                  <strong>{t('options.accountTitle')}</strong>
+                  <p class="help-text">{t('options.teachAccountHelp')}</p>
+                  <label class="account-label-field">{t('options.accountLabel')}
+                    <input
+                      value={draft.accountLabel ?? ''}
+                      placeholder={t('options.accountLabelPlaceholder')}
+                      maxLength={80}
+                      onInput={(event) => updateDraft('accountLabel', event.currentTarget.value)}
+                    />
+                  </label>
+                  <p class="help-text">{t('options.accountLabelHelp')}</p>
+                  <span class={`account-state ${selectedProvider.accountKeyHash ? 'is-set' : ''}`}>
+                    {selectedProvider.accountKeyHash ? t('options.accountTaught') : t('options.accountNotTaught')}
+                  </span>
+                  {accountIdentityMissing && <p class="account-warning" role="alert">{t('options.sharedUrlWarning')}</p>}
+                  {isFirefox() && (containersEnabled
+                    ? <>
+                      <label class="account-label-field">{t('options.container')}
+                        <select
+                          value={draft.cookieStoreId ?? ''}
+                          onChange={(event) => updateDraft('cookieStoreId', event.currentTarget.value || undefined)}
+                        >
+                          <option value="">{t('options.containerNone')}</option>
+                          {containers.map((container) => (
+                            <option key={container.cookieStoreId} value={container.cookieStoreId}>{container.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <p class="help-text">{t('options.containerHelp')}</p>
+                    </>
+                    : <button type="button" onClick={() => void enableContainers()}>{t('options.containerEnable')}</button>)}
+                </div>
+                <div class="teach-panel-actions">
+                  <button class="primary-button" onClick={() => void trackSelected(undefined, 'account')}>{t('options.teachAccount')}</button>
+                  <button type="button" onClick={() => void duplicateForAccount()}>{t('options.duplicateForAccount')}</button>
+                </div>
+              </div>}
               {selectedProvider && selectedProvider.metrics.length > 0 && <div class="taught-metrics">
                 <strong>{t('options.trackedElements')}</strong>
                 {selectedProvider.metrics.map((metric) => {

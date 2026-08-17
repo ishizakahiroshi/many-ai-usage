@@ -1,4 +1,5 @@
 import type { MetricKind, MetricUnit, TaughtMetric } from '../../shared/schema';
+import type { PickerMode } from '../../shared/messages';
 import { diagLog, obsLog, perfLog, perfNow } from '../../shared/perf';
 import { createAnchorFingerprint, textFingerprint } from './selector';
 import { extractValue, type ExtractedValue } from './extract';
@@ -19,7 +20,9 @@ let lastHoverDiagAt = 0;
 let lastHoverDiagKey = '';
 let activeProviderId: string | null = null;
 let initialMetricId: string | undefined;
-let activePickerMode: 'metrics' | 'reset' = 'metrics';
+let activePickerMode: PickerMode = 'metrics';
+/** Set once the account identity has been taught, so Done works without any metric. */
+let accountSaved = false;
 let savedMetrics: TaughtMetric[] = [];
 let saving = false;
 /** Suppress the trailing `click` after a successful `pointerdown` select (same gesture). */
@@ -440,6 +443,19 @@ function resetCandidate(element: Element): boolean {
   return isResetLabelText(text);
 }
 
+function accountText(element: Element): string {
+  return (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * An account identity is a short label (email / display name). Rejecting long blobs keeps a
+ * whole card — which would change on every usage update — from becoming the identity.
+ */
+function isAccountCandidate(element: Element): boolean {
+  const text = accountText(element);
+  return text.length >= 3 && text.length <= 120;
+}
+
 /** Max nodes we will run extractValue on during refine (large SPA shells can be 10k+). */
 const REFINE_EXTRACT_BUDGET = 80;
 /** Do not descend into a child that already owns this many element children (chat threads). */
@@ -734,6 +750,11 @@ function defaultHintText(): string {
   if (activePickerMode === 'reset') {
     return 'Click the reset date or countdown for this metric.';
   }
+  if (activePickerMode === 'account') {
+    return accountSaved
+      ? 'Account saved. Press Done and return.'
+      : 'Click the text that identifies this account (email or account name).';
+  }
   return savedMetrics.length === 0
     ? 'Click a usage number on the page. Then press Done and return.'
     : 'Rename if needed, then press Done and return.';
@@ -820,8 +841,10 @@ function renderPanel(): void {
   const count = panel.querySelector('[data-count]');
   const done = panel.querySelector<HTMLButtonElement>('[data-action="done"]');
   if (!list || !count) return;
-  count.textContent = `Saved: ${savedMetrics.length}`;
-  if (done) done.disabled = savedMetrics.length === 0;
+  count.textContent = activePickerMode === 'account'
+    ? (accountSaved ? 'Account: saved' : 'Account: not set')
+    : `Saved: ${savedMetrics.length}`;
+  if (done) done.disabled = savedMetrics.length === 0 && !accountSaved;
   syncPauseUi();
   setStatusHint(statusHint);
   list.replaceChildren(...savedMetrics.map((metric) => {
@@ -888,7 +911,7 @@ async function cancelPicker(): Promise<void> {
 }
 
 async function finishPicker(): Promise<void> {
-  if (!activeProviderId || savedMetrics.length === 0) return;
+  if (!activeProviderId || (savedMetrics.length === 0 && !accountSaved)) return;
   const providerId = activeProviderId;
   stopPicker();
   await chrome.runtime.sendMessage({ type: 'DONE_TEACH', providerId });
@@ -947,18 +970,20 @@ function onMove(event: MouseEvent): void {
     if (tooltip) tooltip.style.display = 'none';
     return;
   }
-  if (activePickerMode === 'reset') {
+  if (activePickerMode === 'reset' || activePickerMode === 'account') {
+    const account = activePickerMode === 'account';
+    const emptyHint = account ? 'Choose text that identifies the account' : 'Choose a reset date or countdown';
     const stack = hitStackAtPoint(event.clientX, event.clientY);
     const raw = stack[0] ?? null;
     lastHoverHit = null;
-    logHoverDiag(event.clientX, event.clientY, stack.length, raw, raw ? extractValue(raw) : null);
+    if (!account) logHoverDiag(event.clientX, event.clientY, stack.length, raw, raw ? extractValue(raw) : null);
     if (!raw) {
       setHighlight(null);
       if (tooltip) {
         tooltip.style.display = 'block';
         tooltip.style.left = `${Math.min(event.clientX + 12, window.innerWidth - 330)}px`;
         tooltip.style.top = `${Math.min(event.clientY + 12, window.innerHeight - 40)}px`;
-        tooltip.textContent = 'Choose a reset date or countdown';
+        tooltip.textContent = emptyHint;
       }
       return;
     }
@@ -967,9 +992,16 @@ function onMove(event: MouseEvent): void {
     tooltip.style.display = 'block';
     tooltip.style.left = `${Math.min(event.clientX + 12, window.innerWidth - 330)}px`;
     tooltip.style.top = `${Math.min(event.clientY + 12, window.innerHeight - 40)}px`;
+    if (account) {
+      // Preview the identity so the user can see what will be hashed before clicking.
+      tooltip.textContent = isAccountCandidate(raw)
+        ? `${accountText(raw).slice(0, 60)} · click to use as this account`
+        : emptyHint;
+      return;
+    }
     tooltip.textContent = resetCandidate(raw)
       ? `${(raw.textContent ?? '').replace(/\s+/g, ' ').trim()} · click to use reset`
-      : 'Choose a reset date or countdown';
+      : emptyHint;
     return;
   }
   const stackLen = hitStackAtPoint(event.clientX, event.clientY).length;
@@ -1043,10 +1075,48 @@ function selectAtPoint(clientX: number, clientY: number): void {
     return;
   }
   const selectStartedAt = perfNow();
-  const element = resolveSelectElement(clientX, clientY);
+  // Account identities carry no number, so value-driven refinement would walk away from them.
+  const element = activePickerMode === 'account'
+    ? elementAtPoint(clientX, clientY)
+    : resolveSelectElement(clientX, clientY);
   if (!element) {
     obsLog('picker.select.miss', { mode: activePickerMode, usedHover: Boolean(lastHoverHit) });
     setStatusHint('Could not hit a page element under the cursor. Try again.');
+    return;
+  }
+  if (activePickerMode === 'account') {
+    if (!isAccountCandidate(element)) {
+      setStatusHint('Choose a short text that identifies the account, such as the email address.');
+      return;
+    }
+    saving = true;
+    beginSavingWatch();
+    markSelectGesture(clientX, clientY);
+    // Structural only — the identity text itself must never reach a log.
+    obsLog('picker.select.account', {
+      tag: element.tagName.toLowerCase(),
+      textLength: accountText(element).length,
+    });
+    void chrome.runtime.sendMessage({
+      type: 'SAVE_ACCOUNT_ANCHOR',
+      providerId: activeProviderId,
+      accountAnchor: createAnchorFingerprint(element),
+      text: accountText(element),
+    })
+      .then((response: { saved?: boolean }) => {
+        if (response?.saved) {
+          accountSaved = true;
+          statusHint = null;
+        } else {
+          setStatusHint('Could not save this account. Click the account name or email itself.');
+        }
+        renderPanel();
+      })
+      .catch(() => {
+        setStatusHint('Could not save this account. Try again.');
+        renderPanel();
+      })
+      .finally(() => { endSaving(); });
     return;
   }
   if (activePickerMode === 'reset') {
@@ -1378,6 +1448,7 @@ export function stopPicker(): void {
   activeProviderId = null;
   initialMetricId = undefined;
   activePickerMode = 'metrics';
+  accountSaved = false;
   savedMetrics = [];
   saving = false;
   lastSelectAt = 0;
@@ -1389,13 +1460,14 @@ export function stopPicker(): void {
   document.body.style.cursor = '';
 }
 
-export function startPicker(providerId: string, metricId?: string, pickerMode: 'metrics' | 'reset' = 'metrics'): void {
+export function startPicker(providerId: string, metricId?: string, pickerMode: PickerMode = 'metrics'): void {
   stopPicker();
   document.querySelectorAll('[data-many-ai-usage-picker]').forEach((node) => node.remove());
   document.querySelectorAll('[data-many-ai-usage-picker-style]').forEach((node) => node.remove());
   activeProviderId = providerId;
   initialMetricId = metricId;
   activePickerMode = pickerMode;
+  accountSaved = false;
   obsLog('picker.start', {
     providerId,
     pickerMode,
@@ -1481,7 +1553,7 @@ export function startPicker(providerId: string, metricId?: string, pickerMode: '
   panel = document.createElement('div');
   panel.className = 'panel';
   panel.dataset.paused = 'false';
-  panel.innerHTML = `<h2>many-ai-usage teaching</h2><p data-hint>${pickerMode === 'reset' ? 'Click the reset date or countdown for this metric.' : 'Click the big total (e.g. 使用済). Avoid small legend chips.'}</p><div class="count" data-count>Saved: 0</div><div class="list" data-list></div><div class="actions"><button type="button" data-action="pause" aria-pressed="false">Pause page</button><button type="button" data-action="cancel">Cancel</button><button type="button" class="primary" data-action="done" disabled>Done and return</button></div>`;
+  panel.innerHTML = `<h2>many-ai-usage teaching</h2><p data-hint>${pickerMode === 'reset' ? 'Click the reset date or countdown for this metric.' : pickerMode === 'account' ? 'Click the text that identifies this account (email or account name).' : 'Click the big total (e.g. 使用済). Avoid small legend chips.'}</p><div class="count" data-count>${pickerMode === 'account' ? 'Account: not set' : 'Saved: 0'}</div><div class="list" data-list></div><div class="actions"><button type="button" data-action="pause" aria-pressed="false">Pause page</button><button type="button" data-action="cancel">Cancel</button><button type="button" class="primary" data-action="done" disabled>Done and return</button></div>`;
   panel.addEventListener('click', (event) => void panelClick(event));
   panel.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;

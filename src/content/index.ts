@@ -1,13 +1,15 @@
-import type { ProviderContext } from '../shared/messages';
-import type { NormalizedSnapshot } from '../shared/schema';
+import type { PickerMode, ProviderContext } from '../shared/messages';
+import type { NormalizedSnapshot, ProviderConfig } from '../shared/schema';
 import { diagLog, perfLog, perfNow } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
-import { readTaught } from './teach/read';
+import { readAnchorText, readTaught } from './teach/read';
 import { isPickerActive, startPicker } from './teach/picker';
 
 let lastCapturedUrl: string | null = null;
 let captureInFlight = false;
 let captureQueued = false;
+/** Keeps a queued refresh pinned to the entry it was requested for (multi-account URLs). */
+let queuedProviderId: string | undefined;
 
 function urlKey(): string {
   const url = new URL(location.href);
@@ -15,10 +17,10 @@ function urlKey(): string {
   return url.toString();
 }
 
-function pageOnlySnapshot(context: ProviderContext): NormalizedSnapshot {
+function pageOnlySnapshot(provider: ProviderConfig): NormalizedSnapshot {
   return {
-    providerId: context.provider.id,
-    displayName: context.provider.displayName,
+    providerId: provider.id,
+    displayName: provider.displayName,
     capturedAt: new Date().toISOString(),
     source: 'page_only',
     status: 'ok',
@@ -51,9 +53,55 @@ async function waitForHydration(): Promise<void> {
   perfLog('content.waitForHydration', startedAt, { href: location.href }, 100);
 }
 
-async function capture(force = false): Promise<void> {
+/** Mismatch is an ordinary state on a shared usage URL — another account is simply signed in. */
+const ACCOUNT_MISMATCH_REASON = 'This page is signed in to a different account. Switch accounts in the browser, then refresh.';
+const ACCOUNT_UNKNOWN_REASON = 'Could not tell which account this page belongs to. Teach the account on this page first.';
+
+type ProviderResolution =
+  | { provider: ProviderConfig; reason?: undefined }
+  | { provider: null; reason: string };
+
+/**
+ * Decide which registered entry the page in front of us belongs to.
+ *
+ * Several providers can share one usage URL (the same service signed in with different
+ * accounts), so a capture must never be written before the account is identified — writing to
+ * the wrong entry would silently replace another account's numbers.
+ */
+async function resolveTargetProvider(context: ProviderContext, forcedProviderId?: string): Promise<ProviderResolution> {
+  const candidates = context.candidates?.length ? context.candidates : [context.provider];
+  const forced = forcedProviderId ? candidates.find((item) => item.id === forcedProviderId) : undefined;
+  if (forcedProviderId && !forced) return { provider: null, reason: 'forced_provider_not_registered_here' };
+  if (candidates.length === 1) return { provider: forced ?? candidates[0]! };
+
+  const identified = candidates.filter((item) => item.accountAnchor && item.accountKeyHash);
+  if (identified.length === 0) {
+    // Nothing tells the accounts apart. An explicit refresh still targets one entry; an
+    // automatic capture stays silent instead of guessing.
+    return forced ? { provider: forced } : { provider: null, reason: 'ambiguous_no_account_anchor' };
+  }
+  const scope = forced?.accountKeyHash ? [forced] : identified;
+  const readings = scope
+    .map((item) => ({ providerId: item.id, text: item.accountAnchor ? readAnchorText(document, item.accountAnchor) : null }))
+    .filter((item): item is { providerId: string; text: string } => item.text != null);
+  if (readings.length === 0) return { provider: null, reason: 'account_anchor_unreadable' };
+  const resolved = await sendMessage<{ providerId: string | null }>({ type: 'RESOLVE_ACCOUNT', readings });
+  const match = resolved?.providerId ? candidates.find((item) => item.id === resolved.providerId) ?? null : null;
+  if (!match) {
+    // An entry with no identity of its own is the only place an unrecognised page may land.
+    if (forced && !forced.accountKeyHash) return { provider: forced };
+    return { provider: null, reason: 'account_not_recognized' };
+  }
+  if (forced && match.id !== forced.id) return { provider: null, reason: 'account_mismatch' };
+  return { provider: match };
+}
+
+async function capture(force = false, forcedProviderId?: string): Promise<void> {
   if (captureInFlight) {
-    if (force) captureQueued = true;
+    if (force) {
+      captureQueued = true;
+      queuedProviderId = forcedProviderId;
+    }
     return;
   }
   const key = urlKey();
@@ -66,61 +114,86 @@ async function capture(force = false): Promise<void> {
       diagLog('content.capture.skip', { reason: 'no-context-or-permission', href: location.href });
       return;
     }
+    const resolution = await resolveTargetProvider(context, forcedProviderId);
+    const provider = resolution.provider;
+    if (!provider) {
+      diagLog('content.capture.skip', {
+        reason: resolution.reason,
+        candidates: context.candidates?.length ?? 1,
+        forced: Boolean(forcedProviderId),
+      });
+      // An explicit refresh must not hang waiting for a result that will never come.
+      if (forcedProviderId) {
+        const mismatched = resolution.reason === 'account_mismatch' || resolution.reason === 'account_not_recognized';
+        await sendMessage({
+          type: 'CAPTURE_FAILURE',
+          providerId: forcedProviderId,
+          reason: mismatched ? ACCOUNT_MISMATCH_REASON : ACCOUNT_UNKNOWN_REASON,
+        });
+      }
+      return;
+    }
     diagLog('content.capture.start', {
       force,
-      mode: context.provider.mode,
-      providerId: context.provider.id,
-      taughtCount: context.provider.metrics.filter((m) => m.enabled && m.valueAnchor).length,
+      mode: provider.mode,
+      providerId: provider.id,
+      candidates: context.candidates?.length ?? 1,
+      taughtCount: provider.metrics.filter((m) => m.enabled && m.valueAnchor).length,
       href: `${location.pathname}${location.search}`,
     });
     await waitForHydration();
     const readStartedAt = perfNow();
-    let snapshot = context.provider.mode === 'embed'
-      ? pageOnlySnapshot(context)
-      : context.provider.mode === 'taught'
-        ? readTaught(document, context.provider)
+    let snapshot = provider.mode === 'embed'
+      ? pageOnlySnapshot(provider)
+      : provider.mode === 'taught'
+        ? readTaught(document, provider)
         : {
-          ...pageOnlySnapshot(context),
+          ...pageOnlySnapshot(provider),
           warningReason: 'Auto detection is preview-only. Track the exact usage element to show a metric.',
         };
     // Grok-style usage sheets mount after first paint — retry while taught metrics stay empty.
     if (
-      context.provider.mode === 'taught'
+      provider.mode === 'taught'
       && snapshot.metrics.length === 0
-      && context.provider.metrics.some((metric) => metric.enabled && metric.valueAnchor)
+      && provider.metrics.some((metric) => metric.enabled && metric.valueAnchor)
     ) {
       for (const waitMs of [800, 1_500, 2_500]) {
         diagLog('content.capture.retry', {
-          providerId: context.provider.id,
+          providerId: provider.id,
           waitMs,
           previousStatus: snapshot.status,
         });
         await new Promise<void>((resolve) => window.setTimeout(resolve, waitMs));
-        snapshot = readTaught(document, context.provider);
+        snapshot = readTaught(document, provider);
         if (snapshot.metrics.length > 0) break;
       }
     }
-    perfLog('content.readSnapshot', readStartedAt, { mode: context.provider.mode, providerId: context.provider.id, metrics: snapshot.metrics.length }, 20);
+    perfLog('content.readSnapshot', readStartedAt, { mode: provider.mode, providerId: provider.id, metrics: snapshot.metrics.length }, 20);
     diagLog('content.capture.result', {
-      providerId: context.provider.id,
+      providerId: provider.id,
       status: snapshot.status,
       metrics: snapshot.metrics.length,
       warning: Boolean(snapshot.warningReason),
     });
-    await sendMessage({ type: 'CAPTURE_RESULT', providerId: context.provider.id, snapshot });
+    await sendMessage({ type: 'CAPTURE_RESULT', providerId: provider.id, snapshot });
     lastCapturedUrl = key;
   } catch (error) {
     diagLog('content.capture.error', { name: error instanceof Error ? error.name : 'unknown' });
-    const provider = await sendMessage<ProviderContext | null>({ type: 'GET_PROVIDER_CONTEXT', url: location.href }).catch(() => null);
-    if (provider) {
-      await sendMessage({ type: 'CAPTURE_FAILURE', providerId: provider.provider.id, reason: error instanceof Error ? error.message : 'capture failed' });
+    // Report against the entry the refresh targeted; fall back to whatever this URL resolves to.
+    const failedProviderId = forcedProviderId
+      ?? (await sendMessage<ProviderContext | null>({ type: 'GET_PROVIDER_CONTEXT', url: location.href })
+        .catch(() => null))?.provider.id;
+    if (failedProviderId) {
+      await sendMessage({ type: 'CAPTURE_FAILURE', providerId: failedProviderId, reason: error instanceof Error ? error.message : 'capture failed' });
     }
   } finally {
     perfLog('content.capture', startedAt, { force, href: location.href }, 50);
     captureInFlight = false;
     if (captureQueued) {
       captureQueued = false;
-      void capture(true);
+      const queued = queuedProviderId;
+      queuedProviderId = undefined;
+      void capture(true, queued);
     }
   }
 }
@@ -139,7 +212,8 @@ chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendR
   }
   if (message.type === 'START_PICKER' && 'providerId' in message) {
     const metricId = 'metricId' in message && typeof message.metricId === 'string' ? message.metricId : undefined;
-    const pickerMode = 'pickerMode' in message && message.pickerMode === 'reset' ? 'reset' : 'metrics';
+    const requestedMode = 'pickerMode' in message && typeof message.pickerMode === 'string' ? message.pickerMode : '';
+    const pickerMode: PickerMode = requestedMode === 'reset' || requestedMode === 'account' ? requestedMode : 'metrics';
     // startPicker itself replaces any previous host; do not removeOrphan first (re-inject races).
     try {
       startPicker(String(message.providerId), metricId, pickerMode);
@@ -155,7 +229,8 @@ chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendR
     sendResponse({ ok: true, skipped: 'picker_active' });
     return false;
   }
-  void capture(true).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: String(error) }));
+  const pinnedProviderId = 'providerId' in message && typeof message.providerId === 'string' ? message.providerId : undefined;
+  void capture(true, pinnedProviderId).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: String(error) }));
   return true;
 });
 

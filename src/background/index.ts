@@ -1,4 +1,6 @@
-import type { RuntimeMessage, ProviderContext } from '../shared/messages';
+import type { RuntimeMessage, PickerMode, ProviderContext } from '../shared/messages';
+import { hashAccountKey } from '../shared/account';
+import { tabCookieStoreId, tabCreateProperties } from '../shared/containers';
 import {
   isStale,
   makeRuntimeState,
@@ -12,8 +14,10 @@ import {
 import {
   deleteProvider,
   clearSnapshot,
+  getAccountSalt,
   getDashboard,
   getProvider,
+  getProviders,
   getRuntimeState,
   getSnapshot,
   initializeStorage,
@@ -36,7 +40,6 @@ type PendingRefresh = {
 };
 
 const pendingRefreshes = new Map<string, PendingRefresh>();
-type PickerMode = 'metrics' | 'reset';
 export type LiveMetricRead = {
   value: number;
   used: number | null;
@@ -57,11 +60,37 @@ type TeachSession = {
   closeTabOnExit: boolean;
   metrics: TaughtMetric[];
   liveReads: Record<string, LiveMetricRead>;
+  /** Teaching only the account identity is a complete session — Done must not require a metric. */
+  accountSaved: boolean;
 };
 
-const pendingPickers = new Map<number, Omit<TeachSession, 'metrics' | 'liveReads'>>();
+const pendingPickers = new Map<number, Omit<TeachSession, 'metrics' | 'liveReads' | 'accountSaved'>>();
 const teachSessions = new Map<number, TeachSession>();
 const injectionInFlight = new Set<string>();
+
+/**
+ * Every provider registered for a URL, best match first.
+ *
+ * More than one entry means the same service is registered with several accounts. When the
+ * browser reports a container for the tab (Firefox), providers pinned to that container come
+ * first and providers pinned elsewhere drop out entirely; unpinned providers stay eligible so
+ * single-account setups are unaffected.
+ */
+async function providersForUrl(url: string, cookieStoreId?: string): Promise<ProviderConfig[]> {
+  const matched = (await getProviders()).filter((provider) => matchesProviderUrl(provider, url));
+  if (!cookieStoreId) return matched;
+  const pinned = matched.filter((provider) => provider.cookieStoreId === cookieStoreId);
+  const unpinned = matched.filter((provider) => !provider.cookieStoreId);
+  return [...pinned, ...unpinned];
+}
+
+/** A container-pinned provider must not be read from a tab in another container. */
+function matchesProviderContainer(provider: ProviderConfig, tab: chrome.tabs.Tab): boolean {
+  if (!provider.cookieStoreId) return true;
+  const id = tabCookieStoreId(tab);
+  // Chrome never reports a store id — pinning is inert there rather than excluding every tab.
+  return id == null || id === provider.cookieStoreId;
+}
 
 async function hasPermission(provider: ProviderConfig): Promise<boolean> {
   try {
@@ -293,7 +322,9 @@ async function injectCapture(
     if (!(await ensureContentScript(tabId))) return false;
     if (force) {
       await delay(250);
-      await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW' });
+      // Pin the capture: without providerId a refresh of the second account on a shared URL
+      // used to be written into the first entry the content script happened to resolve.
+      await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW', providerId: provider.id });
     }
     return true;
   } catch (error) {
@@ -344,7 +375,7 @@ async function sendStartPicker(tabId: number, providerId: string, metricId: stri
 async function activatePickerOnTab(
   tabId: number,
   provider: ProviderConfig,
-  pending: Omit<TeachSession, 'metrics' | 'liveReads'>,
+  pending: Omit<TeachSession, 'metrics' | 'liveReads' | 'accountSaved'>,
 ): Promise<boolean> {
   teachSessions.set(tabId, {
     providerId: provider.id,
@@ -354,6 +385,7 @@ async function activatePickerOnTab(
     closeTabOnExit: pending.closeTabOnExit,
     metrics: [],
     liveReads: {},
+    accountSaved: false,
   });
   obsLog('bg.teach.start-picker', {
     tabId,
@@ -370,10 +402,9 @@ async function activatePickerOnTab(
   return false;
 }
 
-async function handleProviderTabReady(tabId: number, currentUrl: string): Promise<void> {
-  const providers = (await getDashboard()).providers;
+async function handleProviderTabReady(tabId: number, currentUrl: string, cookieStoreId?: string): Promise<void> {
+  const providers = await providersForUrl(currentUrl, cookieStoreId);
   for (const provider of providers) {
-    if (!matchesProviderUrl(provider, currentUrl)) continue;
     const pendingPicker = pendingPickers.get(tabId);
     // An open teach session must not be disturbed by later complete/SPA events.
     if (teachSessions.has(tabId) && !pendingPicker) continue;
@@ -391,7 +422,10 @@ async function handleProviderTabReady(tabId: number, currentUrl: string): Promis
 
 async function findMatchingTab(provider: ProviderConfig): Promise<chrome.tabs.Tab | null> {
   const tabs = await chrome.tabs.query({});
-  return tabs.find((tab) => tab.id != null && tab.url && matchesProviderUrl(provider, tab.url)) ?? null;
+  return tabs.find((tab) => tab.id != null
+    && tab.url
+    && matchesProviderUrl(provider, tab.url)
+    && matchesProviderContainer(provider, tab)) ?? null;
 }
 
 async function refreshProvider(providerId: string, background = false): Promise<{ started: boolean; tabId?: number; completion?: Promise<void> }> {
@@ -408,7 +442,7 @@ async function refreshProvider(providerId: string, background = false): Promise<
       await injectCapture(tab.id, provider, true, background, true);
     } else {
       try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_NOW' });
+        await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_NOW', providerId: provider.id });
       } catch {
         await injectCapture(tab.id, provider, true, background);
       }
@@ -417,7 +451,7 @@ async function refreshProvider(providerId: string, background = false): Promise<
   }
   // Popup-open refreshes must not steal focus (which would close the popup).  The tab is closed
   // after CAPTURE_RESULT / CAPTURE_FAILURE, so no background tabs accumulate.
-  const created = await chrome.tabs.create({ url: provider.url, active: !background });
+  const created = await chrome.tabs.create(tabCreateProperties(provider.url, !background, provider.cookieStoreId));
   if (created.id == null) return { started: false };
   const pending = beginRefresh(providerId, created.id, background, background);
   if (created.status === 'complete') void injectCapture(created.id, provider, true, background);
@@ -545,7 +579,7 @@ export async function startPicker(
     pendingPickers.delete(tabId);
   }
 
-  const created = await chrome.tabs.create({ url: provider.url, active: true });
+  const created = await chrome.tabs.create(tabCreateProperties(provider.url, true, provider.cookieStoreId));
   if (created.id == null) return { started: false, reason: 'tab_create_failed' };
   arm(created.id, true);
   obsLog('bg.teach.new-tab', { tabId: created.id, providerId });
@@ -713,7 +747,9 @@ function snapshotFromLiveReads(provider: ProviderConfig, session: TeachSession, 
 
 async function saveCompletedTeach(tabId: number, session: TeachSession): Promise<boolean> {
   const provider = await getProvider(session.providerId);
-  if (!provider || session.metrics.length === 0) return false;
+  if (!provider) return false;
+  // Account-only teach is already persisted by SAVE_ACCOUNT_ANCHOR — let Done return.
+  if (session.metrics.length === 0) return session.accountSaved;
   const metrics = [...provider.metrics];
   for (const staged of session.metrics) {
     // Merge by metricId only. Matching on label silently overwrote an older metric
@@ -737,14 +773,14 @@ async function saveCompletedTeach(tabId: number, session: TeachSession): Promise
     });
     // Optional background re-read. Do not await: Done must return to Settings quickly, and
     // updateFromSnapshot already refuses to wipe these live values with an empty capture.
-    void chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW' }).catch(() => {
+    void chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW', providerId: nextProvider.id }).catch(() => {
       /* live snapshot already stored */
     });
   } else {
     const state = await getRuntimeState(provider.id);
     await setRuntimeState({ ...state, status: 'never_seen', confidence: 'taught', errorLabel: null, consecutiveFailures: 0 });
     try {
-      await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW' });
+      await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW', providerId: nextProvider.id });
     } catch {
       /* no live values and capture unavailable */
     }
@@ -798,12 +834,46 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
       return { ...dashboard, runtimeStates: Object.fromEntries(providers) };
     }
     case 'GET_PROVIDER_CONTEXT': {
-      const provider = (await (async () => {
-        const providers = (await getDashboard()).providers;
-        return providers.find((item) => matchesProviderUrl(item, message.url)) ?? null;
-      })());
+      const candidates = await providersForUrl(message.url, tabCookieStoreId(sender?.tab));
+      const provider = candidates[0];
       if (!provider) return null;
-      return { provider, permissionGranted: await hasPermission(provider) } satisfies ProviderContext;
+      return { provider, permissionGranted: await hasPermission(provider), candidates } satisfies ProviderContext;
+    }
+    case 'RESOLVE_ACCOUNT': {
+      // Hashing stays in the worker so the per-install salt never reaches a content script.
+      const salt = await getAccountSalt();
+      for (const reading of message.readings) {
+        const provider = await getProvider(reading.providerId);
+        if (!provider?.accountKeyHash) continue;
+        const hash = await hashAccountKey(reading.text, salt);
+        if (hash && hash === provider.accountKeyHash) {
+          diagLog('bg.account.resolved', { providerId: provider.id, readings: message.readings.length });
+          return { providerId: provider.id };
+        }
+      }
+      diagLog('bg.account.unresolved', { readings: message.readings.length });
+      return { providerId: null };
+    }
+    case 'SAVE_ACCOUNT_ANCHOR': {
+      const provider = await getProvider(message.providerId);
+      if (!provider) return { saved: false };
+      const accountKeyHash = await hashAccountKey(message.text, await getAccountSalt());
+      if (!accountKeyHash) return { saved: false };
+      await upsertProvider({
+        ...provider,
+        accountAnchor: message.accountAnchor,
+        accountKeyHash,
+        updatedAt: new Date().toISOString(),
+      });
+      const teachTabId = sender?.tab?.id;
+      if (teachTabId != null) {
+        const session = teachSessions.get(teachTabId);
+        // Done must be reachable when the user taught only the account.
+        if (session?.providerId === message.providerId) session.accountSaved = true;
+      }
+      // Structural only — never log the identity text itself.
+      obsLog('bg.teach.account-saved', { providerId: provider.id });
+      return { saved: true };
     }
     case 'CAPTURE_RESULT':
       await updateFromSnapshot(message.providerId, message.snapshot);
@@ -820,7 +890,7 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
     case 'OPEN_PROVIDER': {
       const provider = await getProvider(message.providerId);
       if (!provider) return { opened: false };
-      const tab = await chrome.tabs.create({ url: provider.url, active: true });
+      const tab = await chrome.tabs.create(tabCreateProperties(provider.url, true, provider.cookieStoreId));
       return { opened: tab.id != null, tabId: tab.id };
     }
     case 'OPEN_OPTIONS':
@@ -858,6 +928,7 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
           closeTabOnExit: false,
           metrics: [],
           liveReads: {},
+          accountSaved: false,
         };
         teachSessions.set(sender.tab.id, recovered);
         staged = { tabId: sender.tab.id, session: recovered };
@@ -991,7 +1062,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete' || !tab.url) return;
-  void handleProviderTabReady(tabId, tab.url);
+  void handleProviderTabReady(tabId, tab.url, tabCookieStoreId(tab));
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

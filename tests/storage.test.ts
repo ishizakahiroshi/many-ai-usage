@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ProviderConfig } from '../src/shared/schema';
-import { applyRegistryProviders, getProviders, getRuntimeState, getSnapshot, initializeStorage, reorderProviders } from '../src/shared/storage';
+import { accountSaltPattern } from '../src/shared/account';
+import { applyRegistryProviders, getAccountSalt, getProviders, getRuntimeState, getSnapshot, initializeStorage, reorderProviders } from '../src/shared/storage';
 
 function provider(id: string, order: number): ProviderConfig {
   return {
@@ -44,6 +45,20 @@ describe('provider ordering persistence', () => {
     await initializeStorage();
     expect(state.providers).toEqual([]);
     expect(state.schemaVersion).toBe(2);
+  });
+
+  it('does not create an account salt for installs that never use multi-account', async () => {
+    await initializeStorage();
+    expect(state.accountSalt).toBeUndefined();
+  });
+
+  it('creates the account salt once and keeps reusing it', async () => {
+    const first = await getAccountSalt();
+    const second = await getAccountSalt();
+    expect(first).toMatch(accountSaltPattern);
+    // Rotating the salt would orphan every stored account hash.
+    expect(second).toBe(first);
+    expect(state.accountSalt).toBe(first);
   });
 
   it('merges registry providers without overwriting existing entries', async () => {
