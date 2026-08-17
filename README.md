@@ -24,17 +24,24 @@ The sample registry is data, not executable code:
 
 See the [Japanese usage guide](https://ishizakahiroshi.com/articles/many-ai-usage/usage.html) for the practice page and service-by-service navigation recipes.
 
-## Several accounts on one service
+## Several accounts on one service (Firefox only)
 
-A browser profile holds one session per site, so the dashboard can only read the account that is
-actually signed in. Register the same usage page once per account with **Duplicate for another
-account**, give each entry an account name, then use **Teach the account on this page** to point at
-the text that identifies it (an email address, for example). Only a salted hash of that text is
-stored, and a refresh writes to an entry only when the page really shows that account.
+A browser profile holds one session per site, so a dashboard that reads pages can only ever show
+the account that is currently signed in. Firefox containers are the one mechanism that keeps two
+sessions alive at once, so this feature is offered there and nowhere else. On Chrome the panel is
+not shown: a second entry could only ever display a stale value, which is worse than not offering
+it. Reading several accounts on Chrome would require storing each account's credentials, which
+this extension deliberately does not do.
 
-- Chrome: switch accounts in the browser, then refresh — the matching entry updates on its own.
-- Firefox: assign each entry a container and every account refreshes independently. Containers are
-  opt-in and ask for the `contextualIdentities` / `cookies` permissions the first time you enable them.
+1. Enable containers when prompted (the `contextualIdentities` / `cookies` permissions are optional
+   and requested only at that point).
+2. Register the same usage page once per account with **Duplicate for another account**.
+3. Give each entry an account name and assign it a different container.
+
+Each entry then refreshes inside its own container, so every account stays current without any
+switching. If you prefer to switch logins manually instead of using containers, **Teach the account
+on this page** lets you point at the text that identifies each account; only a salted hash of that
+text is stored, and a refresh writes to an entry only when the page really shows that account.
 
 ## Development
 
