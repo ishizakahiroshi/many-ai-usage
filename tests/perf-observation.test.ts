@@ -59,6 +59,9 @@ function timed<T>(label: string, run: () => T): { label: string; ms: number; res
 }
 
 describe('perf observation on large SPA-like DOM', () => {
+  // Durations are observed and logged, never asserted — only node counts are. CI runners take
+  // roughly twice the local time (6.2s there vs 2.8s here), so the default 5s timeout is what
+  // fails, not the measurement. Widen it instead of turning this into a speed threshold.
   it('times teach hot paths when usage sits inside a huge layout card', () => {
     const samples: Array<{ nodes: number; timings: Record<string, number> }> = [];
 
@@ -85,5 +88,5 @@ describe('perf observation on large SPA-like DOM', () => {
     // eslint-disable-next-line no-console
     console.log('[perf-obs] summary', JSON.stringify(samples, null, 2));
     expect(samples).toHaveLength(3);
-  });
+  }, 30_000);
 });
