@@ -677,7 +677,10 @@ function OptionsApp() {
                 <label>{t('options.mode')}<select value={draft.mode} onChange={(event) => updateDraft('mode', event.currentTarget.value as ProviderMode)}><option value="auto">{t('options.modeAuto')}</option><option value="taught">{t('options.modeTaught')}</option><option value="embed">{t('options.modeEmbed')}</option></select></label>
               </div>
               {selectedProvider && <div class="teach-panel"><div><strong>{t('options.teachTitle')}</strong><p class="help-text">{t('options.teachHelp')}</p></div><div class="teach-panel-actions"><button class="primary-button" onClick={() => void trackSelected()}>{t('options.trackElement')}</button>{selectedProvider.metrics.length > 0 && <button class="primary-button" onClick={() => void trackSelected(undefined, 'metrics', true)}>{t('options.fixTracking')}</button>}</div></div>}
-              {selectedProvider && <div class="teach-panel account-panel">
+              {/* Firefox only. A Chrome profile holds one session per site, so two accounts can
+                  never both be current — the second entry could only ever show a stale value.
+                  Hiding the panel there is better than offering a flow that cannot deliver. */}
+              {selectedProvider && isFirefox() && <div class="teach-panel account-panel">
                 <div>
                   <strong>{t('options.accountTitle')}</strong>
                   {/* Steps first: the section used to open with "click the text that identifies
@@ -695,6 +698,9 @@ function OptionsApp() {
                   <span class={`account-state ${selectedProvider.accountKeyHash ? 'is-set' : ''}`}>
                     {selectedProvider.accountKeyHash ? t('options.accountTaught') : t('options.accountNotTaught')}
                   </span>
+                  {/* Containers are the primary mechanism; teaching an identity is the fallback
+                      for users who switch logins instead of using containers. */}
+                  <p class="help-text">{t('options.accountTeachOptional')}</p>
                   <p class="help-text">{t('options.teachAccountHelp')}</p>
                   {accountIdentityMissing && <p class="account-warning" role="alert">{t('options.sharedUrlWarning')}</p>}
                   {isFirefox() && (containersEnabled
