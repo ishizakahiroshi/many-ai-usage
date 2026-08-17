@@ -284,7 +284,8 @@ describe('background continuous teach sessions', () => {
     const result = await background.handleMessage({ type: 'REFRESH_DASHBOARD' });
 
     expect(result).toEqual({ refreshed: 1, skipped: 0, timedOut: 0 });
-    expect(sendTabMessage).toHaveBeenCalledWith(5, { type: 'CAPTURE_NOW' });
+    // providerId pins the capture so a shared usage URL cannot write into another account's entry.
+    expect(sendTabMessage).toHaveBeenCalledWith(5, { type: 'CAPTURE_NOW', providerId: 'fixture:continuous' });
   });
 
   it('never redirects an ordinary matching chat tab during automatic capture', async () => {
@@ -491,5 +492,102 @@ describe('background continuous teach sessions', () => {
     expect(saved).toHaveLength(1);
     expect(saved[0]?.metricId).toBe('taught-rolling');
     expect(saved[0]?.valueAnchor?.selectors).toEqual(['#new']);
+  });
+
+  describe('multi-account providers on one usage URL', () => {
+    // Synthetic identities only — never a real account address.
+    const IDENTITY_A = 'person-a@example.com';
+    const IDENTITY_B = 'person-b@example.com';
+
+    function secondAccount(): ProviderConfig {
+      return { ...provider(), id: 'fixture:account-b', accountLabel: 'B', order: 1 };
+    }
+
+    async function teachIdentity(providerId: string, text: string): Promise<void> {
+      await background.handleMessage({
+        type: 'SAVE_ACCOUNT_ANCHOR',
+        providerId,
+        accountAnchor: { selectors: ['#account'] },
+        text,
+      }, { tab: { id: 5 } } as chrome.runtime.MessageSender);
+    }
+
+    it('offers every entry registered for the shared URL as a candidate', async () => {
+      state.providers = [provider(), secondAccount()];
+      const context = await background.handleMessage(
+        { type: 'GET_PROVIDER_CONTEXT', url: 'https://example.test/usage' },
+        { tab: { id: 5 } } as chrome.runtime.MessageSender,
+      ) as { candidates: ProviderConfig[] };
+      expect(context.candidates.map((item) => item.id)).toEqual(['fixture:continuous', 'fixture:account-b']);
+    });
+
+    it('stores only a hash of the taught identity, never the text', async () => {
+      state.providers = [provider(), secondAccount()];
+      const saved = await background.handleMessage({
+        type: 'SAVE_ACCOUNT_ANCHOR',
+        providerId: 'fixture:account-b',
+        accountAnchor: { selectors: ['#account'] },
+        text: IDENTITY_B,
+      }, { tab: { id: 5 } } as chrome.runtime.MessageSender);
+      expect(saved).toEqual({ saved: true });
+      const stored = (state.providers as ProviderConfig[]).find((item) => item.id === 'fixture:account-b');
+      expect(stored?.accountKeyHash).toMatch(/^[0-9a-f]{32}$/);
+      expect(JSON.stringify(state)).not.toContain(IDENTITY_B);
+    });
+
+    it('resolves the shared URL to the account currently signed in', async () => {
+      state.providers = [provider(), secondAccount()];
+      await teachIdentity('fixture:continuous', IDENTITY_A);
+      await teachIdentity('fixture:account-b', IDENTITY_B);
+      const readings = [
+        { providerId: 'fixture:continuous', text: IDENTITY_B },
+        { providerId: 'fixture:account-b', text: IDENTITY_B },
+      ];
+      expect(await background.handleMessage({ type: 'RESOLVE_ACCOUNT', readings }))
+        .toEqual({ providerId: 'fixture:account-b' });
+    });
+
+    it('refuses to guess when the page shows an unknown account', async () => {
+      state.providers = [provider(), secondAccount()];
+      await teachIdentity('fixture:continuous', IDENTITY_A);
+      await teachIdentity('fixture:account-b', IDENTITY_B);
+      const resolved = await background.handleMessage({
+        type: 'RESOLVE_ACCOUNT',
+        readings: [{ providerId: 'fixture:continuous', text: 'person-c@example.com' }],
+      });
+      expect(resolved).toEqual({ providerId: null });
+    });
+
+    it('keeps a container-pinned entry out of another container', async () => {
+      state.providers = [
+        { ...provider(), cookieStoreId: 'firefox-container-1' },
+        { ...secondAccount(), cookieStoreId: 'firefox-container-2' },
+      ];
+      const context = await background.handleMessage(
+        { type: 'GET_PROVIDER_CONTEXT', url: 'https://example.test/usage' },
+        { tab: { id: 5, cookieStoreId: 'firefox-container-2' } } as unknown as chrome.runtime.MessageSender,
+      ) as { candidates: ProviderConfig[] };
+      expect(context.candidates.map((item) => item.id)).toEqual(['fixture:account-b']);
+    });
+
+    it('pins an explicit refresh to the entry it was requested for', async () => {
+      state.providers = [provider(), secondAccount()];
+      sendTabMessage.mockClear();
+      await background.handleMessage({ type: 'REFRESH_PROVIDER', providerId: 'fixture:account-b' });
+      expect(sendTabMessage).toHaveBeenCalledWith(5, { type: 'CAPTURE_NOW', providerId: 'fixture:account-b' });
+    });
+
+    it('lets Done finish a session where only the account was taught', async () => {
+      await openTeachSession();
+      const sender = { tab: { id: 99 } } as chrome.runtime.MessageSender;
+      await background.handleMessage({
+        type: 'SAVE_ACCOUNT_ANCHOR',
+        providerId: 'fixture:continuous',
+        accountAnchor: { selectors: ['#account'] },
+        text: IDENTITY_A,
+      }, sender);
+      expect(await background.handleMessage({ type: 'DONE_TEACH', providerId: 'fixture:continuous' }, sender))
+        .toEqual({ saved: true });
+    });
   });
 });

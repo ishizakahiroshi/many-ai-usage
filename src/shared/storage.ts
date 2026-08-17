@@ -1,3 +1,4 @@
+import { accountSaltPattern, createAccountSalt } from './account';
 import {
   makeRuntimeState,
   safeParseProvider,
@@ -9,6 +10,8 @@ import {
 } from './schema';
 
 const PROVIDERS_KEY = 'providers';
+/** Per-install salt for account identity hashes. Created lazily — only multi-account users need it. */
+const ACCOUNT_SALT_KEY = 'accountSalt';
 // Legacy (pre schemaVersion 2) combined-object keys, kept only for one-time migration.
 const LEGACY_SNAPSHOTS_KEY = 'snapshots';
 const LEGACY_RUNTIME_KEY = 'runtimeStates';
@@ -53,6 +56,20 @@ export async function initializeStorage(): Promise<void> {
     patch[VERSION_KEY] = STORAGE_SCHEMA_VERSION;
   }
   if (Object.keys(patch).length > 0) await localStorage().set(patch);
+}
+
+/**
+ * Salt used to hash account identities. Generated on first use and never rotated —
+ * rotating it would orphan every stored accountKeyHash. Only the background worker reads
+ * it, so a content script never sees the salt.
+ */
+export async function getAccountSalt(): Promise<string> {
+  const result = await localStorage().get(ACCOUNT_SALT_KEY);
+  const existing = result[ACCOUNT_SALT_KEY];
+  if (typeof existing === 'string' && accountSaltPattern.test(existing)) return existing;
+  const salt = createAccountSalt();
+  await localStorage().set({ [ACCOUNT_SALT_KEY]: salt });
+  return salt;
 }
 
 export type ApplyProvidersResult = { added: string[]; skipped: string[]; replaced: string[] };

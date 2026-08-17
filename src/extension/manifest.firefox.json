@@ -16,7 +16,7 @@
   },
   "permissions": ["storage", "tabs", "scripting"],
   "host_permissions": ["https://raw.githubusercontent.com/ishizakahiroshi/*"],
-  "optional_permissions": ["*://*/*"],
+  "optional_permissions": ["*://*/*", "contextualIdentities", "cookies"],
   "browser_specific_settings": {
     "gecko": {
       "id": "many-ai-usage@example.com",

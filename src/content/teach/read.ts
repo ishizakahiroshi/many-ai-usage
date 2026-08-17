@@ -1,4 +1,4 @@
-import type { NormalizedMetric, NormalizedSnapshot, ProviderConfig, TaughtMetric } from '../../shared/schema';
+import type { AnchorFingerprint, NormalizedMetric, NormalizedSnapshot, ProviderConfig, TaughtMetric } from '../../shared/schema';
 import { diagLog } from '../../shared/perf';
 import { extractValue, type ExtractedValue } from './extract';
 import { findByFingerprint, findByLabelHint, findUsageHeadline } from './selector';
@@ -48,7 +48,7 @@ function resolvePath(document: Document, metric: TaughtMetric): {
   return { element: byFingerprint ?? byLabel, path: byFingerprint || byLabel ? 'fingerprint' : 'none' };
 }
 
-function resolveAnchor(document: Document, anchor: NonNullable<TaughtMetric['resetAnchor']>): Element | null {
+export function resolveAnchor(document: Document, anchor: AnchorFingerprint): Element | null {
   for (const selector of anchor.selectors) {
     try {
       const element = document.querySelector(selector);
@@ -58,6 +58,19 @@ function resolveAnchor(document: Document, anchor: NonNullable<TaughtMetric['res
     }
   }
   return findByFingerprint(document, anchor);
+}
+
+/** Longest identity text we pass on — the account chip can be wrapped in a whole card. */
+const MAX_ANCHOR_TEXT = 200;
+
+/**
+ * Text behind an anchor, used for the account identity of multi-account providers.
+ * Returned to the background worker for hashing only — the caller must not store it.
+ */
+export function readAnchorText(document: Document, anchor: AnchorFingerprint): string | null {
+  const element = resolveAnchor(document, anchor);
+  const text = element?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  return text.length > 0 ? text.slice(0, MAX_ANCHOR_TEXT) : null;
 }
 
 function looksLikeBreakdownChip(text: string): boolean {

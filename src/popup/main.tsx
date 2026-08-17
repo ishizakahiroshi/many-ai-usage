@@ -32,6 +32,37 @@ function level(metric: NormalizedMetric): string {
   return 'ok';
 }
 
+interface ProviderGroup {
+  key: string;
+  label: string;
+  iconDataUrl?: string;
+  providers: ProviderConfig[];
+}
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Group entries that stand for one service. Same display name + same origin means the same
+ * service registered with several accounts, which is drawn as one heading with a row per
+ * account. A single-entry group renders exactly as before.
+ */
+function groupProviders(providers: ProviderConfig[]): ProviderGroup[] {
+  const groups: ProviderGroup[] = [];
+  for (const provider of providers) {
+    const key = `${provider.displayName}::${originOf(provider.url)}`;
+    const existing = groups.find((group) => group.key === key);
+    if (existing) existing.providers.push(provider);
+    else groups.push({ key, label: provider.displayName, iconDataUrl: provider.iconDataUrl, providers: [provider] });
+  }
+  return groups;
+}
+
 function lowestMetric(metrics: NormalizedMetric[]): string | null {
   const candidates = metrics
     .map((metric) => ({ id: metric.id, value: remainingPercent(metric) }))
@@ -113,8 +144,10 @@ function MiniMetric({ metric, lowest, t }: { metric: NormalizedMetric; lowest: b
   );
 }
 
-function ProviderRow({ provider, snapshot, state, reload, t, dragging, onDragStart, onDragEnd, onDropOn }: {
+function ProviderRow({ provider, rowLabel, snapshot, state, reload, t, dragging, onDragStart, onDragEnd, onDropOn }: {
   provider: ProviderConfig;
+  /** Service name normally; the account name when several accounts share this service. */
+  rowLabel: string;
   snapshot: DashboardResponse['snapshots'][string];
   state: ProviderRuntimeState;
   reload: () => void;
@@ -158,7 +191,7 @@ function ProviderRow({ provider, snapshot, state, reload, t, dragging, onDragSta
             ? <img class="provider-icon" src={provider.iconDataUrl} alt="" aria-hidden="true" />
             : null}
           <div class="provider-name-copy">
-            <span class="provider-name-text">{provider.displayName}</span>
+            <span class="provider-name-text">{rowLabel}</span>
             <small class="provider-age">{t('popup.lastUpdated', { value: ageLabel(snapshot?.capturedAt ?? null, t) })}</small>
           </div>
         </div>
@@ -457,22 +490,41 @@ function PopupApp() {
             )}
           </div>
         )}
-        {normal.map((provider) => (
-          <ProviderRow
-            key={provider.id}
-            provider={provider}
-            snapshot={dashboard.snapshots[provider.id]}
-            state={dashboard.runtimeStates[provider.id]}
-            reload={reload}
-            t={t}
-            dragging={draggedId === provider.id}
-            onDragStart={() => setDraggedId(provider.id)}
-            onDragEnd={() => setDraggedId(null)}
-            onDropOn={(fromId) => {
-              void reorder(fromId, provider.id);
-            }}
-          />
-        ))}
+        {groupProviders(normal).map((group) => {
+          const multi = group.providers.length > 1;
+          const rows = group.providers.map((provider, index) => (
+            <ProviderRow
+              key={provider.id}
+              provider={provider}
+              rowLabel={multi
+                ? (provider.accountLabel?.trim() || t('popup.unnamedAccount', { n: index + 1 }))
+                : provider.displayName}
+              snapshot={dashboard.snapshots[provider.id]}
+              state={dashboard.runtimeStates[provider.id]}
+              reload={reload}
+              t={t}
+              dragging={draggedId === provider.id}
+              onDragStart={() => setDraggedId(provider.id)}
+              onDragEnd={() => setDraggedId(null)}
+              onDropOn={(fromId) => {
+                void reorder(fromId, provider.id);
+              }}
+            />
+          ));
+          if (!multi) return rows;
+          return (
+            <section class="provider-group" key={group.key}>
+              <header class="provider-group-heading">
+                {group.iconDataUrl
+                  ? <img class="provider-icon" src={group.iconDataUrl} alt="" aria-hidden="true" />
+                  : null}
+                <strong>{group.label}</strong>
+                <span class="provider-group-count">{t('popup.accountCount', { n: group.providers.length })}</span>
+              </header>
+              {rows}
+            </section>
+          );
+        })}
       </section>
       {issues.length > 0 && (
         <section class="issues">

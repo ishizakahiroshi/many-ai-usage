@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { accountKeyHashPattern } from './account';
 
 export const providerModes = ['auto', 'taught', 'embed'] as const;
 export type ProviderMode = (typeof providerModes)[number];
@@ -60,6 +61,17 @@ export interface ProviderConfig {
   metrics: TaughtMetric[];
   /** User-uploaded icon as a data URL. Never auto-fetched from the provider host (trademark / privacy). */
   iconDataUrl?: string;
+  /**
+   * Which account this entry stands for when several providers share one usage URL
+   * (e.g. "personal" / "work"). Shown as the row label; the service name stays in displayName.
+   */
+  accountLabel?: string;
+  /** Where the account identity (email / display name) sits on the usage page. */
+  accountAnchor?: AnchorFingerprint;
+  /** Salted hash of the account identity text. The raw text is never stored (see shared/account.ts). */
+  accountKeyHash?: string;
+  /** Firefox container (cookieStoreId) this account lives in. Never set on Chrome. */
+  cookieStoreId?: string;
   createdAt: string;
   updatedAt: string;
   order: number;
@@ -147,6 +159,11 @@ export const providerConfigSchema = v.object({
     v.regex(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,/i),
     v.maxLength(ICON_DATA_URL_MAX_LENGTH),
   )),
+  accountLabel: v.optional(v.pipe(v.string(), v.maxLength(80))),
+  accountAnchor: v.optional(anchorSchema),
+  // Hash only — a provider carrying raw identity text must not validate.
+  accountKeyHash: v.optional(v.pipe(v.string(), v.regex(accountKeyHashPattern))),
+  cookieStoreId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   createdAt: v.pipe(v.string(), v.isoTimestamp()),
   updatedAt: v.pipe(v.string(), v.isoTimestamp()),
   order: v.number(),

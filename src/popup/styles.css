@@ -69,6 +69,12 @@ button:hover { border-color: #9ca3af; background: #f9fafb; }
 .text-button { border: 0; padding: 4px; color: var(--muted); background: transparent; }
 .provider-list { padding: 8px 12px; }
 .provider-row { border-bottom: 1px solid var(--line); }
+/* Multi-account service: one heading, then one row per account. */
+.provider-group { border-bottom: 1px solid var(--line); }
+.provider-group .provider-row:last-child { border-bottom: none; }
+.provider-group-heading { display: flex; align-items: center; gap: 6px; padding: 6px 0 2px; }
+.provider-group-heading strong { font-size: 13px; }
+.provider-group-count { color: var(--muted); font-size: 11px; }
 .provider-row.expanded { background: #fff7ed; }
 .provider-row.dragging { opacity: .55; }
 .row-main { display: grid; grid-template-columns: 14px 70px minmax(0, 1fr) 30px 30px; gap: 7px; align-items: center; min-height: 52px; }

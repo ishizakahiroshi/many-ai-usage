@@ -24,6 +24,18 @@ The sample registry is data, not executable code:
 
 See the [Japanese usage guide](https://ishizakahiroshi.com/articles/many-ai-usage/usage.html) for the practice page and service-by-service navigation recipes.
 
+## Several accounts on one service
+
+A browser profile holds one session per site, so the dashboard can only read the account that is
+actually signed in. Register the same usage page once per account with **Duplicate for another
+account**, give each entry an account name, then use **Teach the account on this page** to point at
+the text that identifies it (an email address, for example). Only a salted hash of that text is
+stored, and a refresh writes to an entry only when the page really shows that account.
+
+- Chrome: switch accounts in the browser, then refresh — the matching entry updates on its own.
+- Firefox: assign each entry a container and every account refreshes independently. Containers are
+  opt-in and ask for the `contextualIdentities` / `cookies` permissions the first time you enable them.
+
 ## Development
 
 ```text
