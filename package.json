@@ -15,7 +15,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "preact": "^10.26.9",
+    "preact": "^10.29.8",
     "valibot": "^1.1.0"
   },
   "devDependencies": {
