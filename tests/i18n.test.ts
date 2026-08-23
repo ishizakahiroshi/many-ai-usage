@@ -35,6 +35,12 @@ describe('createTranslator', () => {
     expect(t('reportBody.extension', { version: '0.1.0' })).toContain('v0.1.0');
     expect(t('missing.key')).toBe('missing.key');
   });
+
+  it('inserts replacement syntax and nested-looking placeholders literally in one pass', () => {
+    const t = createTranslator({ sample: 'Value={value}; again={value}; status={status}' });
+    expect(t('sample', { value: '$& $1 {status}', status: 'ready' }))
+      .toBe('Value=$& $1 {status}; again=$& $1 {status}; status=ready');
+  });
 });
 
 describe('initI18n with packs', () => {

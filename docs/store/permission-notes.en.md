@@ -10,7 +10,7 @@ instead of rewriting it each release.
 | `storage` | Store provider settings and captured snapshots in the browser only |
 | `tabs` | Find the tab that already shows a registered usage page, and open one when the user refreshes |
 | `scripting` | Inject the local reader into a registered usage page the user granted access to |
-| Host access to `https://raw.githubusercontent.com/ishizakahiroshi/*` | Fetch the URL-only sample registry, and only after the user confirms **Try samples** |
+| Host access to `https://raw.githubusercontent.com/ishizakahiroshi/*` | Fetch the public starter configuration and sample letter-badge icons, and only after the user confirms **Try samples** |
 
 ## Optional permissions
 
@@ -37,6 +37,6 @@ to it.
 ## Multi-account identity data
 
 To decide which entry a capture belongs to, the user can teach where the account identity (an email
-address or display name) sits on the page. The extension stores the element's selector/fingerprint
+address or display name) sits on the page. The extension stores only a text-free numeric DOM path
 and a SHA-256 hash of the text, salted with a per-install random value. The identity text itself is
-never stored, never logged, and never leaves the browser.
+used transiently for hashing, never stored, never logged, and never leaves the browser.

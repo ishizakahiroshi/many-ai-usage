@@ -21,7 +21,6 @@ import {
 } from '../shared/i18n';
 import { buildGitHubIssueUrl, buildReportBody, detectBrowser, githubOpenUserMessage } from '../shared/report';
 import { fetchStarterPack, isSampleProviderId, parseStarterPackText, STARTER_PACK_URL, USAGE_GUIDE_URL } from '../shared/samples';
-import { applyStarterProviders } from '../shared/storage';
 import { obsLog, perfLog, perfNow } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
 import { originChanged, originPattern, sameOriginAndPath, urlWithoutHash } from '../shared/url';
@@ -31,6 +30,8 @@ type ProviderDraft = Pick<
   ProviderConfig,
   'id' | 'displayName' | 'url' | 'refreshIntervalMinutes' | 'mode' | 'order' | 'createdAt' | 'updatedAt' | 'iconDataUrl' | 'accountLabel' | 'cookieStoreId'
 >;
+
+type StarterApplyResult = { added: string[]; skipped: string[]; replaced: string[] };
 
 function blankDraft(order = 0): ProviderDraft {
   return {
@@ -429,7 +430,7 @@ function OptionsApp() {
     setSamplesDialogOpen(true);
   };
 
-  const formatImportMessage = (result: { added: string[]; skipped: string[]; replaced: string[] }): string => {
+  const formatImportMessage = (result: StarterApplyResult): string => {
     if (result.added.length === 0 && result.replaced.length === 0) {
       return t?.('samples.alreadyRegistered') ?? 'Already registered';
     }
@@ -442,14 +443,17 @@ function OptionsApp() {
   };
 
   const mergeStarterProviders = async (providers: import('../shared/schema').ProviderConfig[]) => {
-    let result = await applyStarterProviders(providers);
+    let result = await sendMessage<StarterApplyResult>({
+      type: 'APPLY_STARTER_PROVIDERS',
+      providers,
+    });
     if (result.added.length === 0 && result.skipped.length > 0 && result.replaced.length === 0) {
       const shouldReplace = window.confirm(
         t?.('samples.replaceConfirm', { count: result.skipped.length })
           ?? `Overwrite ${result.skipped.length} existing providers?`,
       );
       if (shouldReplace) {
-        result = await applyStarterProviders(providers, { replaceExisting: true });
+        result = await sendMessage<StarterApplyResult>({ type: 'APPLY_STARTER_PROVIDERS', providers, replaceExisting: true });
       }
     }
     return result;
@@ -500,11 +504,7 @@ function OptionsApp() {
   };
 
   const extensionVersion = useMemo(() => {
-    try {
-      return chrome.runtime.getManifest().version;
-    } catch {
-      return '0.1.0';
-    }
+    return chrome.runtime.getManifest().version;
   }, []);
 
   const reportBody = useMemo(() => {

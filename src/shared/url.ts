@@ -25,18 +25,35 @@ export function sameOriginAndPath(left: string, right: string): boolean {
   }
 }
 
-/** Match registry patterns such as `https://claude.ai/*` or exact provider URLs. */
+/** Keep navigation diagnostics useful without retaining credentials, query values, or fragments. */
+export function urlForLog(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Match registry patterns such as `https://claude.ai/*` or exact provider URLs.
+ *
+ * A wildcard may only stand for part of the path. `https://claude.ai*` is rejected: as a raw
+ * string prefix it would also match `https://claude.ai.example.com/usage`, so a host-level
+ * wildcard can never be honoured as written.
+ */
 export function matchesUrlPattern(pattern: string, currentUrl: string): boolean {
   try {
     const current = new URL(currentUrl);
-    if (pattern.endsWith('/*')) {
-      const prefix = pattern.slice(0, -1); // keep trailing slash intent: origin + /
-      const base = new URL(prefix);
-      return current.origin === base.origin && (current.pathname.startsWith(base.pathname) || base.pathname === '/');
-    }
     if (pattern.endsWith('*')) {
       const prefix = pattern.slice(0, -1);
-      return currentUrl.startsWith(prefix) || urlWithoutHash(currentUrl).startsWith(urlWithoutHash(prefix));
+      const base = new URL(prefix);
+      // The wildcard has to start at or after the path; anything shorter is a host wildcard.
+      if (prefix.length <= base.origin.length) return false;
+      if (current.origin !== base.origin) return false;
+      const basePath = `${base.pathname}${base.search}`;
+      if (basePath === '/') return true;
+      return `${current.pathname}${current.search}`.startsWith(basePath);
     }
     return sameOriginAndPath(pattern, currentUrl);
   } catch {

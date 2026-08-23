@@ -14,7 +14,7 @@ many-ai-usage は、登録した利用状況ページからユーザーが選ん
 
 主な機能:
 
-- 初期状態は空。必要な場合だけ Try samples で URL のみのサンプル6件を取得
+- 初期状態は空。必要な場合だけ Try samples で starter provider 7件（4件は review 済み taught metric 付き）を取得
 - 専用の新規タブで picker を開き、複数の利用値を 1 セッションで連続登録
 - metric 名の変更・個別削除と、近くのリセット表示の自動関連付け
 - selector と fingerprint によるページ改訂時の再探索
@@ -24,14 +24,14 @@ many-ai-usage は、登録した利用状況ページからユーザーが選ん
 プライバシー:
 
 - 外部サーバーへデータを送信しません
-- Cookie、トークン、ページ本文、アカウント識別子を収集しません
+- Cookie、トークン、ページ本文、アカウント識別文字、利用値を外部送信しません
 - 利用状況の取得は読み取り専用です
 
 使用権限:
 
 - `storage`: 設定、教えた selector、ローカルスナップショットを保存
 - `tabs` / `scripting`: 登録ページを見つけ、ページ内のローカル読み取り処理を実行
-- GitHub raw への固定 host access: Try samples の確認後だけ、公開された URL のみのサンプル台帳を取得
+- GitHub raw への固定 host access: Try samples の確認後だけ、公開 starter 設定とサンプル文字アイコンを取得
 - optional host access: ユーザーが許可した登録済み利用状況ページだけを読み取り
 
 カテゴリ候補: Productivity

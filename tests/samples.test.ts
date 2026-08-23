@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isAllowedSampleIconUrl } from '../src/shared/icon';
+import { fetchSampleIconDataUrl, isAllowedSampleIconUrl } from '../src/shared/icon';
 import {
   fetchProvidersRegistry,
   fetchStarterPack,
@@ -71,6 +71,18 @@ describe('sample icon URL policy', () => {
     expect(isAllowedSampleIconUrl('https://raw.githubusercontent.com/other/repo/main/x.svg')).toBe(false);
     expect(isAllowedSampleIconUrl('https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/x.txt')).toBe(false);
   });
+
+  it('derives the MIME type from pathname when an allowed icon URL has a query', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new TextEncoder().encode('<svg></svg>').buffer,
+    }));
+    const dataUrl = await fetchSampleIconDataUrl(
+      'https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/provider-sample-icons/claude.svg?download=1',
+    );
+    expect(dataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
+  });
 });
 
 describe('sample provider fetch', () => {
@@ -78,7 +90,11 @@ describe('sample provider fetch', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => registry });
     vi.stubGlobal('fetch', fetchMock);
     const providers = await fetchProvidersRegistry();
-    expect(fetchMock).toHaveBeenCalledWith(PROVIDERS_REGISTRY_URL, { cache: 'no-store', credentials: 'omit' });
+    expect(fetchMock).toHaveBeenCalledWith(PROVIDERS_REGISTRY_URL, {
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: expect.any(AbortSignal),
+    });
     expect(providers.map((item) => item.id)).toEqual(SAMPLE_PROVIDER_IDS);
   });
 
@@ -111,7 +127,11 @@ describe('starter pack fetch', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const providers = await fetchStarterPack();
-    expect(fetchMock).toHaveBeenCalledWith(STARTER_PACK_URL, { cache: 'no-store', credentials: 'omit' });
+    expect(fetchMock).toHaveBeenCalledWith(STARTER_PACK_URL, {
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: expect.any(AbortSignal),
+    });
     expect(providers).toHaveLength(2);
     expect(providers[0].iconDataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
     expect(providers[1].iconDataUrl).toBeUndefined();

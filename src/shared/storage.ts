@@ -1,4 +1,5 @@
 import { accountSaltPattern, createAccountSalt } from './account';
+import { diagLog } from './perf';
 import {
   makeRuntimeState,
   safeParseProvider,
@@ -16,7 +17,7 @@ const ACCOUNT_SALT_KEY = 'accountSalt';
 const LEGACY_SNAPSHOTS_KEY = 'snapshots';
 const LEGACY_RUNTIME_KEY = 'runtimeStates';
 const VERSION_KEY = 'schemaVersion';
-const STORAGE_SCHEMA_VERSION = 2;
+const STORAGE_SCHEMA_VERSION = 3;
 
 // snapshot:<id> / runtimeState:<id> are separate keys per provider (schemaVersion 2+) so that
 // concurrent get-then-set on unrelated providers (e.g. refreshDashboard's parallel refreshes)
@@ -33,6 +34,16 @@ function localStorage(): chrome.storage.LocalStorageArea {
   return chrome.storage.local;
 }
 
+// All provider-list writers run in the background worker after UI callers are routed through
+// messages. A single tail prevents overlapping get→set sequences from losing another mutation.
+let providerMutationTail: Promise<void> = Promise.resolve();
+
+function runProviderMutation<T>(mutation: () => Promise<T>): Promise<T> {
+  const run = providerMutationTail.then(mutation, mutation);
+  providerMutationTail = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 /** One-time migration from the pre-v2 combined `snapshots`/`runtimeStates` objects to per-provider keys. */
 async function migrateToPerProviderKeys(): Promise<void> {
   const result = await localStorage().get([LEGACY_SNAPSHOTS_KEY, LEGACY_RUNTIME_KEY]);
@@ -45,6 +56,21 @@ async function migrateToPerProviderKeys(): Promise<void> {
   await localStorage().remove([LEGACY_SNAPSHOTS_KEY, LEGACY_RUNTIME_KEY]);
 }
 
+function stripLegacyAccountAnchors(rawProviders: unknown[]): { providers: unknown[]; affectedIds: string[] } {
+  const affectedIds: string[] = [];
+  const providers = rawProviders.map((rawProvider) => {
+    if (!rawProvider || typeof rawProvider !== 'object' || Array.isArray(rawProvider)) return rawProvider;
+    const record = rawProvider as Record<string, unknown>;
+    if (!Object.hasOwn(record, 'accountAnchor') && !Object.hasOwn(record, 'accountKeyHash')) return rawProvider;
+    const next = { ...record };
+    delete next.accountAnchor;
+    delete next.accountKeyHash;
+    if (typeof record.id === 'string') affectedIds.push(record.id);
+    return next;
+  });
+  return { providers, affectedIds };
+}
+
 export async function initializeStorage(): Promise<void> {
   const result = await localStorage().get([PROVIDERS_KEY, VERSION_KEY]);
   const rawProviders = result[PROVIDERS_KEY];
@@ -53,6 +79,26 @@ export async function initializeStorage(): Promise<void> {
   const storedVersion = typeof result[VERSION_KEY] === 'number' ? result[VERSION_KEY] : 0;
   if (storedVersion < STORAGE_SCHEMA_VERSION) {
     if (storedVersion < 2) await migrateToPerProviderKeys();
+    if (storedVersion < 3 && Array.isArray(rawProviders)) {
+      // v1/v2 account anchors reused the metric fingerprint shape. Its selector/id/class/
+      // aria-label and nearbyLabel could contain the raw identity, so no field-by-field salvage
+      // is safe. Clear anchor+hash together and require one explicit account re-teach.
+      const migrated = stripLegacyAccountAnchors(rawProviders);
+      if (migrated.affectedIds.length > 0) {
+        patch[PROVIDERS_KEY] = migrated.providers;
+        const keys = migrated.affectedIds.map(runtimeStateKey);
+        const states = await localStorage().get(keys);
+        for (const id of migrated.affectedIds) {
+          const existing = safeParseRuntimeState(states[runtimeStateKey(id)]) ?? makeRuntimeState(id);
+          patch[runtimeStateKey(id)] = {
+            ...existing,
+            status: 'needs_teaching',
+            pageBinding: 'stale',
+            errorLabel: 'Re-teach the account identity to continue multi-account matching.',
+          } satisfies ProviderRuntimeState;
+        }
+      }
+    }
     patch[VERSION_KEY] = STORAGE_SCHEMA_VERSION;
   }
   if (Object.keys(patch).length > 0) await localStorage().set(patch);
@@ -63,13 +109,25 @@ export async function initializeStorage(): Promise<void> {
  * rotating it would orphan every stored accountKeyHash. Only the background worker reads
  * it, so a content script never sees the salt.
  */
-export async function getAccountSalt(): Promise<string> {
-  const result = await localStorage().get(ACCOUNT_SALT_KEY);
-  const existing = result[ACCOUNT_SALT_KEY];
-  if (typeof existing === 'string' && accountSaltPattern.test(existing)) return existing;
-  const salt = createAccountSalt();
-  await localStorage().set({ [ACCOUNT_SALT_KEY]: salt });
-  return salt;
+let accountSaltInFlight: Promise<string> | null = null;
+
+export function getAccountSalt(): Promise<string> {
+  if (accountSaltInFlight) return accountSaltInFlight;
+  const pending = (async () => {
+    const result = await localStorage().get(ACCOUNT_SALT_KEY);
+    const existing = result[ACCOUNT_SALT_KEY];
+    if (typeof existing === 'string' && accountSaltPattern.test(existing)) return existing;
+    const salt = createAccountSalt();
+    await localStorage().set({ [ACCOUNT_SALT_KEY]: salt });
+    return salt;
+  })();
+  accountSaltInFlight = pending;
+  void pending.finally(() => {
+    if (accountSaltInFlight === pending) accountSaltInFlight = null;
+  }).catch(() => {
+    // The caller receives the original rejection; this only handles the cleanup chain.
+  });
+  return pending;
 }
 
 export type ApplyProvidersResult = { added: string[]; skipped: string[]; replaced: string[] };
@@ -79,7 +137,7 @@ export type ApplyProvidersResult = { added: string[]; skipped: string[]; replace
  * Default: add unknown ids only (never overwrite user teach / Re-teach).
  * With replaceExisting: overwrite matching ids' url/metrics/mode (opt-in only).
  */
-export async function applyStarterProviders(
+async function applyStarterProvidersUnlocked(
   remote: ProviderConfig[],
   options: { replaceExisting?: boolean } = {},
 ): Promise<ApplyProvidersResult> {
@@ -139,17 +197,30 @@ export async function applyStarterProviders(
   return { added, skipped, replaced };
 }
 
-/** @deprecated Prefer applyStarterProviders — same merge rules without replace. */
-export async function applyRegistryProviders(remote: ProviderConfig[]): Promise<{ added: string[]; skipped: string[] }> {
-  const result = await applyStarterProviders(remote);
-  return { added: result.added, skipped: result.skipped };
+export function applyStarterProviders(
+  remote: ProviderConfig[],
+  options: { replaceExisting?: boolean } = {},
+): Promise<ApplyProvidersResult> {
+  return runProviderMutation(() => applyStarterProvidersUnlocked(remote, options));
 }
 
 export async function getProviders(): Promise<ProviderConfig[]> {
   const result = await localStorage().get(PROVIDERS_KEY);
-  const providers = Array.isArray(result[PROVIDERS_KEY])
-    ? result[PROVIDERS_KEY].map(safeParseProvider).filter((provider): provider is ProviderConfig => provider !== null)
-    : [];
+  const raw = Array.isArray(result[PROVIDERS_KEY]) ? result[PROVIDERS_KEY] : [];
+  const providers = raw
+    .map(safeParseProvider)
+    .filter((provider): provider is ProviderConfig => provider !== null);
+  // A dropped entry disappears permanently on the next write, so say so at least once. Only the
+  // count and the id-shaped field are logged — never the stored values themselves.
+  if (providers.length < raw.length) {
+    diagLog('storage.providers.dropped', {
+      dropped: raw.length - providers.length,
+      kept: providers.length,
+      droppedIds: raw
+        .filter((entry) => safeParseProvider(entry) === null)
+        .map((entry) => (typeof (entry as { id?: unknown })?.id === 'string' ? (entry as { id: string }).id : null)),
+    });
+  }
   return providers.sort((a, b) => a.order - b.order);
 }
 
@@ -157,18 +228,22 @@ export async function getProvider(id: string): Promise<ProviderConfig | null> {
   return (await getProviders()).find((provider) => provider.id === id) ?? null;
 }
 
-export async function upsertProvider(provider: ProviderConfig): Promise<void> {
-  const providers = await getProviders();
-  const next = providers.some((item) => item.id === provider.id)
-    ? providers.map((item) => (item.id === provider.id ? provider : item))
-    : [...providers, { ...provider, order: provider.order ?? providers.length }];
-  await localStorage().set({ [PROVIDERS_KEY]: next });
+export function upsertProvider(provider: ProviderConfig): Promise<void> {
+  return runProviderMutation(async () => {
+    const providers = await getProviders();
+    const next = providers.some((item) => item.id === provider.id)
+      ? providers.map((item) => (item.id === provider.id ? provider : item))
+      : [...providers, { ...provider, order: provider.order ?? providers.length }];
+    await localStorage().set({ [PROVIDERS_KEY]: next });
+  });
 }
 
-export async function deleteProvider(id: string): Promise<void> {
-  const providers = (await getProviders()).filter((provider) => provider.id !== id);
-  await localStorage().set({ [PROVIDERS_KEY]: providers });
-  await localStorage().remove([snapshotKey(id), runtimeStateKey(id)]);
+export function deleteProvider(id: string): Promise<void> {
+  return runProviderMutation(async () => {
+    const providers = (await getProviders()).filter((provider) => provider.id !== id);
+    await localStorage().set({ [PROVIDERS_KEY]: providers });
+    await localStorage().remove([snapshotKey(id), runtimeStateKey(id)]);
+  });
 }
 
 export async function getSnapshot(id: string): Promise<NormalizedSnapshot | null> {
@@ -193,11 +268,13 @@ export async function setRuntimeState(state: ProviderRuntimeState): Promise<void
   await localStorage().set({ [runtimeStateKey(state.providerId)]: state });
 }
 
-export async function reorderProviders(ids: string[]): Promise<void> {
-  const providers = await getProviders();
-  const positions = new Map(ids.map((id, index) => [id, index]));
-  const next = providers.map((provider, index) => ({ ...provider, order: positions.get(provider.id) ?? ids.length + index }));
-  await localStorage().set({ [PROVIDERS_KEY]: next });
+export function reorderProviders(ids: string[]): Promise<void> {
+  return runProviderMutation(async () => {
+    const providers = await getProviders();
+    const positions = new Map(ids.map((id, index) => [id, index]));
+    const next = providers.map((provider, index) => ({ ...provider, order: positions.get(provider.id) ?? ids.length + index }));
+    await localStorage().set({ [PROVIDERS_KEY]: next });
+  });
 }
 
 export async function getDashboard() {

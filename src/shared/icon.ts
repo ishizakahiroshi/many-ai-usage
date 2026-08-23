@@ -1,4 +1,5 @@
 import { ICON_DATA_URL_MAX_LENGTH } from './schema';
+import { fetchWithTimeout } from './fetch';
 
 /** Square size written into storage for user-uploaded provider icons. */
 export const PROVIDER_ICON_SIZE = 64;
@@ -37,7 +38,12 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 function mimeFromSampleIconUrl(url: string): string {
-  const lower = url.toLowerCase();
+  let lower = '';
+  try {
+    lower = new URL(url).pathname.toLowerCase();
+  } catch {
+    return 'application/octet-stream';
+  }
   if (lower.endsWith('.svg')) return 'image/svg+xml';
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
@@ -54,7 +60,7 @@ export async function fetchSampleIconDataUrl(url: string): Promise<string> {
   if (!isAllowedSampleIconUrl(url)) {
     throw new Error('Sample icon URL is not allowed');
   }
-  const response = await fetch(url, { cache: 'no-store', credentials: 'omit' });
+  const response = await fetchWithTimeout(url, { cache: 'no-store', credentials: 'omit' });
   if (!response.ok) throw new Error(`Sample icon request failed (${response.status})`);
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength === 0) throw new Error('Sample icon is empty');

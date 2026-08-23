@@ -229,7 +229,8 @@ function IssueCard({ provider, snapshot, state, reload, t }: {
   const [teachBusy, setTeachBusy] = useState(false);
   const tile = snapshot?.source === 'page_only';
   const needsTeaching = state.status === 'needs_teaching';
-  // Snapshot may say "Re-teach needed for: …" while runtime status is still warning (not yet 3 failures).
+  // Snapshot may say "Re-teach needed for: …" while runtime status is still warning — the status
+  // only flips after NEEDS_TEACHING_FAILURE_THRESHOLD consecutive failures (shared/schema.ts).
   const reteachMessage = snapshot?.warningReason ?? snapshot?.lastFailureReason ?? state.errorLabel ?? '';
   const reteachMentioned = /re-teach|reteach|教え直/i.test(reteachMessage);
   const taughtMetrics = provider.metrics.filter((metric) => metric.enabled && metric.valueAnchor);
@@ -351,6 +352,7 @@ function PopupApp() {
   const [t, setT] = useState<TranslateFn | null>(null);
   const [locale, setLocale] = useState('en');
   const [catalog, setCatalog] = useState<LocaleCatalog | null>(null);
+  const extensionVersion = chrome.runtime.getManifest().version;
   const reload = () => void sendMessage<DashboardResponse>({ type: 'GET_DASHBOARD' }).then(setDashboard);
 
   const applyI18n = () => {
@@ -444,7 +446,7 @@ function PopupApp() {
         <div class="brand">
           <img class="app-icon" src={chrome.runtime.getURL('assets/icons/icon-192.png')} width={22} height={22} alt="" />
           <strong>many-ai-usage</strong>
-          <span>v0.1.0</span>
+          <span>v{extensionVersion}</span>
         </div>
         <div class="header-actions">
           <button

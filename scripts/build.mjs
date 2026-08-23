@@ -2,16 +2,10 @@ import { context } from 'esbuild';
 import { cp, mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseBuildArgs } from './build-args.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const args = new Set(process.argv.slice(2));
-const requestedTarget = process.argv.find((arg) => arg.startsWith('--target='))?.split('=')[1];
-const targets = requestedTarget ? [requestedTarget] : ['chrome', 'firefox'];
-const watch = args.has('--watch');
-
-if (targets.some((target) => !['chrome', 'firefox'].includes(target))) {
-  throw new Error('target must be chrome or firefox');
-}
+const { targets, watch } = parseBuildArgs(process.argv.slice(2));
 
 const entries = {
   background: 'src/background/index.ts',

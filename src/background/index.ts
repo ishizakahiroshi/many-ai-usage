@@ -4,6 +4,13 @@ import { tabCookieStoreId, tabCreateProperties } from '../shared/containers';
 import {
   isStale,
   makeRuntimeState,
+  NEEDS_TEACHING_FAILURE_THRESHOLD,
+  PROVIDER_COLLECTION_MAX_LENGTH,
+  PROVIDER_ID_MAX_LENGTH,
+  safeParseAccountAnchor,
+  safeParseProvider,
+  safeParseRemoteProvider,
+  safeParseSnapshot,
   type MetricUnit,
   type NormalizedMetric,
   type NormalizedSnapshot,
@@ -12,6 +19,7 @@ import {
   type TaughtMetric,
 } from '../shared/schema';
 import {
+  applyStarterProviders,
   deleteProvider,
   clearSnapshot,
   getAccountSalt,
@@ -27,9 +35,10 @@ import {
   upsertProvider,
 } from '../shared/storage';
 import { diagLog, obsLog, perfLog, perfNow } from '../shared/perf';
-import { matchesProviderUrl, originPattern } from '../shared/url';
+import { matchesProviderUrl, originPattern, urlForLog } from '../shared/url';
 
 type PendingRefresh = {
+  requestId: string;
   tabId: number;
   /** Keep a popup-open refresh from activating or navigating a visible tab in the foreground. */
   background: boolean;
@@ -40,6 +49,7 @@ type PendingRefresh = {
 };
 
 const pendingRefreshes = new Map<string, PendingRefresh>();
+let refreshSequence = 0;
 export type LiveMetricRead = {
   value: number;
   used: number | null;
@@ -123,7 +133,7 @@ async function updateFromSnapshot(providerId: string, snapshot: import('../share
   const previousHasData = (previous?.metrics.length ?? 0) > 0;
   if (incomingEmpty && previousHasData) {
     const consecutiveFailures = (state.consecutiveFailures ?? 0) + 1;
-    const status = consecutiveFailures >= 3 ? 'needs_teaching' as const : 'warning' as const;
+    const status = consecutiveFailures >= NEEDS_TEACHING_FAILURE_THRESHOLD ? 'needs_teaching' as const : 'warning' as const;
     diagLog('bg.snapshot.keep-previous', {
       providerId,
       previousMetrics: previous!.metrics.length,
@@ -153,7 +163,7 @@ async function updateFromSnapshot(providerId: string, snapshot: import('../share
   const confidence = snapshot.source === 'dom' ? 'heuristic' : snapshot.source === 'user_taught' ? 'taught' : 'none';
   const taughtReadFailed = provider.mode === 'taught' && (snapshot.metrics.length === 0 || snapshot.lastFailureReason != null);
   const consecutiveFailures = taughtReadFailed ? (state.consecutiveFailures ?? 0) + 1 : 0;
-  const status = taughtReadFailed && consecutiveFailures >= 3
+  const status = taughtReadFailed && consecutiveFailures >= NEEDS_TEACHING_FAILURE_THRESHOLD
     ? 'needs_teaching' as const
     : snapshot.status === 'warning' || taughtReadFailed
       ? 'warning' as const
@@ -183,13 +193,14 @@ async function updateFromSnapshot(providerId: string, snapshot: import('../share
   await setRuntimeState(next);
 }
 
-async function updateFailure(providerId: string, reason: string): Promise<void> {
+async function updateFailure(providerId: string, reason: string, expectedRequestId?: string): Promise<void> {
   const provider = await getProvider(providerId);
   const state = await getRuntimeState(providerId);
   const now = new Date().toISOString();
   const taughtFailure = provider?.mode === 'taught';
   const consecutiveFailures = taughtFailure ? (state.consecutiveFailures ?? 0) + 1 : state.consecutiveFailures ?? 0;
-  const status = taughtFailure && consecutiveFailures >= 3 ? 'needs_teaching' as const : 'error' as const;
+  const status = taughtFailure && consecutiveFailures >= NEEDS_TEACHING_FAILURE_THRESHOLD ? 'needs_teaching' as const : 'error' as const;
+  if (expectedRequestId && pendingRefreshes.get(providerId)?.requestId !== expectedRequestId) return;
   await setRuntimeState({
     ...state,
     lastAttemptAt: now,
@@ -201,26 +212,39 @@ async function updateFailure(providerId: string, reason: string): Promise<void> 
   });
 }
 
-function beginRefresh(providerId: string, tabId: number, background: boolean, temporary: boolean): PendingRefresh {
-  const current = pendingRefreshes.get(providerId);
-  if (current) return current;
-  let complete = () => {};
-  const completion = new Promise<void>((resolve) => { complete = resolve; });
-  const pending = { tabId, background, temporary, completion, complete };
-  pendingRefreshes.set(providerId, pending);
-  return pending;
-}
-
-function finishRefresh(providerId: string): void {
-  const pending = pendingRefreshes.get(providerId);
-  if (!pending) return;
-  pendingRefreshes.delete(providerId);
+function retireRefresh(pending: PendingRefresh): void {
   pending.complete();
   if (pending.temporary) {
     void chrome.tabs.remove(pending.tabId).catch(() => {
       // The user may have closed the background tab while it was loading.
     });
   }
+}
+
+function beginRefresh(providerId: string, tabId: number, background: boolean, temporary: boolean): PendingRefresh {
+  const current = pendingRefreshes.get(providerId);
+  if (current?.tabId === tabId) return current;
+  if (current) {
+    pendingRefreshes.delete(providerId);
+    retireRefresh(current);
+  }
+  let complete = () => {};
+  const completion = new Promise<void>((resolve) => { complete = resolve; });
+  refreshSequence += 1;
+  const requestId = `refresh-${Date.now().toString(36)}-${refreshSequence.toString(36)}`;
+  const pending = { requestId, tabId, background, temporary, completion, complete };
+  pendingRefreshes.set(providerId, pending);
+  return pending;
+}
+
+function finishRefresh(providerId: string, requestId?: string, tabId?: number): boolean {
+  const pending = pendingRefreshes.get(providerId);
+  if (!pending) return false;
+  if (requestId && pending.requestId !== requestId) return false;
+  if (tabId != null && pending.tabId !== tabId) return false;
+  pendingRefreshes.delete(providerId);
+  retireRefresh(pending);
+  return true;
 }
 
 function delay(ms: number): Promise<void> {
@@ -282,14 +306,23 @@ async function ensureTabOnProviderUsage(provider: ProviderConfig, tabId: number,
     obsLog('bg.capture.navigate-usage', {
       tabId,
       providerId: provider.id,
-      from: tab.url ?? null,
-      to: provider.url,
+      from: tab.url ? urlForLog(tab.url) : null,
+      to: urlForLog(provider.url),
     });
     await chrome.tabs.update(tabId, { url: provider.url, active: !background, autoDiscardable: false });
     tab = (await waitForTabComplete(tabId)) ?? tab;
     // Usage sheets are often SPA-mounted after 'complete'.
     await delay(1_000);
-    return matchesProviderUrl(provider, tab.url ?? '');
+    // A server-side redirect to another page on the same origin (e.g. /chat) still satisfies the
+    // broad urlMatch, so completion must use the narrow entry check the non-navigating path uses.
+    // Otherwise a redirect turns an ordinary page into a capture target.
+    if (isOnProviderUsageEntry(provider, tab.url)) return true;
+    obsLog('bg.capture.navigate-usage.off-entry', {
+      tabId,
+      providerId: provider.id,
+      landed: tab.url ? urlForLog(tab.url) : null,
+    });
+    return false;
   } catch {
     return false;
   }
@@ -306,6 +339,7 @@ async function injectCapture(
   force = false,
   background = false,
   navigateToUsage = false,
+  requestId?: string,
 ): Promise<boolean> {
   const key = `${tabId}:${provider.id}`;
   if (injectionInFlight.has(key)) return false;
@@ -324,11 +358,14 @@ async function injectCapture(
       await delay(250);
       // Pin the capture: without providerId a refresh of the second account on a shared URL
       // used to be written into the first entry the content script happened to resolve.
-      await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW', providerId: provider.id });
+      await chrome.tabs.sendMessage(tabId, { type: 'CAPTURE_NOW', providerId: provider.id, requestId });
     }
     return true;
   } catch (error) {
-    if (force) await updateFailure(provider.id, error instanceof Error ? error.message : 'Unable to inject content script');
+    if (force) {
+      await updateFailure(provider.id, error instanceof Error ? error.message : 'Unable to inject content script', requestId);
+      finishRefresh(provider.id, requestId, tabId);
+    }
     return false;
   } finally {
     injectionInFlight.delete(key);
@@ -413,7 +450,7 @@ async function handleProviderTabReady(tabId: number, currentUrl: string, cookieS
       await activatePickerOnTab(tabId, provider, pendingPicker);
     } else {
       const pending = pendingRefreshes.get(provider.id);
-      await injectCapture(tabId, provider, pending?.tabId === tabId, pending?.background ?? false);
+      await injectCapture(tabId, provider, pending?.tabId === tabId, pending?.background ?? false, false, pending?.requestId);
     }
     // A forced refresh completes only when its content script returns a result.  Dropping the
     // pending entry here would make a popup believe that navigation itself was fresh data.
@@ -428,7 +465,12 @@ async function findMatchingTab(provider: ProviderConfig): Promise<chrome.tabs.Ta
     && matchesProviderContainer(provider, tab)) ?? null;
 }
 
-async function refreshProvider(providerId: string, background = false): Promise<{ started: boolean; tabId?: number; completion?: Promise<void> }> {
+async function refreshProvider(providerId: string, background = false): Promise<{
+  started: boolean;
+  tabId?: number;
+  requestId?: string;
+  completion?: Promise<void>;
+}> {
   const provider = await getProvider(providerId);
   if (!provider) return { started: false };
   const tab = await findMatchingTab(provider);
@@ -439,23 +481,23 @@ async function refreshProvider(providerId: string, background = false): Promise<
     const pending = beginRefresh(providerId, tab.id, background, false);
     if (!existingIsUsageEntry) {
       // Refresh is an explicit action, so it may move a matching chat tab to its usage entry.
-      await injectCapture(tab.id, provider, true, background, true);
+      await injectCapture(tab.id, provider, true, background, true, pending.requestId);
     } else {
       try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_NOW', providerId: provider.id });
+        await chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_NOW', providerId: provider.id, requestId: pending.requestId });
       } catch {
-        await injectCapture(tab.id, provider, true, background);
+        await injectCapture(tab.id, provider, true, background, false, pending.requestId);
       }
     }
-    return { started: true, tabId: tab.id, completion: pending.completion };
+    return { started: true, tabId: tab.id, requestId: pending.requestId, completion: pending.completion };
   }
   // Popup-open refreshes must not steal focus (which would close the popup).  The tab is closed
   // after CAPTURE_RESULT / CAPTURE_FAILURE, so no background tabs accumulate.
   const created = await chrome.tabs.create(tabCreateProperties(provider.url, !background, provider.cookieStoreId));
   if (created.id == null) return { started: false };
   const pending = beginRefresh(providerId, created.id, background, background);
-  if (created.status === 'complete') void injectCapture(created.id, provider, true, background);
-  return { started: true, tabId: created.id, completion: pending.completion };
+  if (created.status === 'complete') void injectCapture(created.id, provider, true, background, false, pending.requestId);
+  return { started: true, tabId: created.id, requestId: pending.requestId, completion: pending.completion };
 }
 
 async function refreshDashboard(): Promise<{ refreshed: number; skipped: number; timedOut: number }> {
@@ -470,8 +512,8 @@ async function refreshDashboard(): Promise<{ refreshed: number; skipped: number;
       delay(15_000).then(() => false),
     ]);
     if (!completed) {
-      await updateFailure(provider.id, 'Timed out while refreshing usage data.');
-      finishRefresh(provider.id);
+      await updateFailure(provider.id, 'Timed out while refreshing usage data.', started.requestId);
+      finishRefresh(provider.id, started.requestId, started.tabId);
       return 'timed_out' as const;
     }
     return 'refreshed' as const;
@@ -813,7 +855,25 @@ async function syncPermission(providerId: string, granted: boolean): Promise<voi
   });
 }
 
-export async function handleMessage(message: RuntimeMessage, sender?: chrome.runtime.MessageSender): Promise<unknown> {
+function validBoundedId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= PROVIDER_ID_MAX_LENGTH;
+}
+
+function currentRefreshAccepts(providerId: string, requestId: string | undefined, senderTabId: number | undefined): boolean {
+  const pending = pendingRefreshes.get(providerId);
+  if (requestId) {
+    return Boolean(pending && pending.requestId === requestId && senderTabId === pending.tabId);
+  }
+  // Automatic captures have no request ID. They remain valid unless a forced refresh is
+  // currently owned by another tab, in which case accepting them would complete that request.
+  return !pending || senderTabId === pending.tabId;
+}
+
+export async function handleMessage(rawMessage: RuntimeMessage | unknown, sender?: chrome.runtime.MessageSender): Promise<unknown> {
+  if (!rawMessage || typeof rawMessage !== 'object' || typeof (rawMessage as { type?: unknown }).type !== 'string') {
+    return { error: 'invalid_message' };
+  }
+  const message = rawMessage as RuntimeMessage;
   switch (message.type) {
     case 'GET_DASHBOARD': {
       const startedAt = perfNow();
@@ -857,11 +917,13 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
     case 'SAVE_ACCOUNT_ANCHOR': {
       const provider = await getProvider(message.providerId);
       if (!provider) return { saved: false };
+      const accountAnchor = safeParseAccountAnchor(message.accountAnchor);
+      if (!accountAnchor) return { saved: false };
       const accountKeyHash = await hashAccountKey(message.text, await getAccountSalt());
       if (!accountKeyHash) return { saved: false };
       await upsertProvider({
         ...provider,
-        accountAnchor: message.accountAnchor,
+        accountAnchor,
         accountKeyHash,
         updatedAt: new Date().toISOString(),
       });
@@ -875,14 +937,42 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
       obsLog('bg.teach.account-saved', { providerId: provider.id });
       return { saved: true };
     }
-    case 'CAPTURE_RESULT':
-      await updateFromSnapshot(message.providerId, message.snapshot);
-      finishRefresh(message.providerId);
+    case 'CAPTURE_RESULT': {
+      const snapshot = safeParseSnapshot(message.snapshot);
+      const requestId = typeof message.requestId === 'string' && message.requestId.length <= 160
+        ? message.requestId
+        : undefined;
+      if (!validBoundedId(message.providerId)
+        || !snapshot
+        || snapshot.providerId !== message.providerId
+        || (message.requestId != null && !requestId)) {
+        return { ok: false, error: 'invalid_capture_result' };
+      }
+      if (!currentRefreshAccepts(message.providerId, requestId, sender?.tab?.id)) {
+        return { ok: false, error: 'stale_capture_result' };
+      }
+      await updateFromSnapshot(message.providerId, snapshot);
+      finishRefresh(message.providerId, requestId, sender?.tab?.id);
       return { ok: true };
-    case 'CAPTURE_FAILURE':
-      await updateFailure(message.providerId, message.reason);
-      finishRefresh(message.providerId);
+    }
+    case 'CAPTURE_FAILURE': {
+      const requestId = typeof message.requestId === 'string' && message.requestId.length <= 160
+        ? message.requestId
+        : undefined;
+      if (!validBoundedId(message.providerId)
+        || typeof message.reason !== 'string'
+        || message.reason.length === 0
+        || message.reason.length > 2_048
+        || (message.requestId != null && !requestId)) {
+        return { ok: false, error: 'invalid_capture_failure' };
+      }
+      if (!currentRefreshAccepts(message.providerId, requestId, sender?.tab?.id)) {
+        return { ok: false, error: 'stale_capture_failure' };
+      }
+      await updateFailure(message.providerId, message.reason, requestId);
+      finishRefresh(message.providerId, requestId, sender?.tab?.id);
       return { ok: false };
+    }
     case 'REFRESH_PROVIDER':
       return refreshProvider(message.providerId);
     case 'REFRESH_DASHBOARD':
@@ -900,21 +990,45 @@ export async function handleMessage(message: RuntimeMessage, sender?: chrome.run
     case 'SYNC_PERMISSION':
       await syncPermission(message.providerId, message.granted);
       return { synced: true };
-    case 'UPSERT_PROVIDER':
-      {
-      const previous = await getProvider(message.provider.id);
-      await upsertProvider(message.provider);
-      if (previous && previous.url !== message.provider.url) await clearSnapshot(message.provider.id);
-      if (message.permissionGranted) await syncPermission(message.provider.id, true);
-      else await setRuntimeState({ ...makeRuntimeState(message.provider.id, 'needs_permission'), errorLabel: 'Host permission is required to read this page.' });
-      return { saved: true };
+    case 'UPSERT_PROVIDER': {
+      const provider = safeParseProvider(message.provider);
+      if (!provider || typeof message.permissionGranted !== 'boolean') {
+        return { saved: false, error: 'invalid_provider' };
       }
+      const previous = await getProvider(provider.id);
+      await upsertProvider(provider);
+      if (previous && previous.url !== provider.url) await clearSnapshot(provider.id);
+      if (message.permissionGranted) await syncPermission(provider.id, true);
+      else await setRuntimeState({ ...makeRuntimeState(provider.id, 'needs_permission'), errorLabel: 'Host permission is required to read this page.' });
+      return { saved: true };
+    }
+    case 'APPLY_STARTER_PROVIDERS': {
+      if (!Array.isArray(message.providers)
+        || message.providers.length === 0
+        || message.providers.length > PROVIDER_COLLECTION_MAX_LENGTH
+        || (message.replaceExisting != null && typeof message.replaceExisting !== 'boolean')) {
+        return { added: [], skipped: [], replaced: [], error: 'invalid_starter_providers' };
+      }
+      const providers = message.providers.map(safeParseRemoteProvider);
+      if (providers.some((provider) => provider == null)) {
+        return { added: [], skipped: [], replaced: [], error: 'invalid_starter_providers' };
+      }
+      return applyStarterProviders(providers as ProviderConfig[], { replaceExisting: message.replaceExisting === true });
+    }
     case 'DELETE_PROVIDER':
+      if (!validBoundedId(message.providerId)) return { deleted: false, error: 'invalid_provider_id' };
       await deleteProvider(message.providerId);
       return { deleted: true };
-    case 'REORDER_PROVIDERS':
+    case 'REORDER_PROVIDERS': {
+      if (!Array.isArray(message.ids)
+        || message.ids.length > PROVIDER_COLLECTION_MAX_LENGTH
+        || message.ids.some((id) => !validBoundedId(id))
+        || new Set(message.ids).size !== message.ids.length) {
+        return { reordered: false, error: 'invalid_provider_order' };
+      }
       await reorderProviders(message.ids);
       return { reordered: true };
+    }
     case 'START_PICKER':
       return startPicker(message.providerId, message.metricId, sender, message.pickerMode);
     case 'SAVE_METRIC': {
@@ -1070,7 +1184,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   teachSessions.delete(tabId);
   for (const [providerId, pending] of pendingRefreshes) {
     if (pending.tabId !== tabId) continue;
-    void updateFailure(providerId, 'tab closed during refresh').finally(() => finishRefresh(providerId));
+    const requestId = pending.requestId;
+    void updateFailure(providerId, 'tab closed during refresh', requestId)
+      .finally(() => finishRefresh(providerId, requestId, tabId));
   }
 });
 

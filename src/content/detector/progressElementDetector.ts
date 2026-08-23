@@ -20,7 +20,7 @@ export function detectProgressElements(document: Document): DetectorCandidate[] 
       kind: 'progress',
       value: percentage,
       used: isUsed ? percentage : null,
-      remaining: isRemaining || !isUsed ? percentage : null,
+      remaining: isUsed ? null : percentage,
       total: 100,
       label: element.getAttribute('aria-label') ?? meta.label,
       windowLabel: meta.windowLabel,

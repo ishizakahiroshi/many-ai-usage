@@ -10,7 +10,7 @@ v0.1.0 makes teach-mode the safe default for exact usage values: the extension o
 - Taught value extraction and local snapshots
 - Re-teach prompt after three consecutive failures
 - Chrome ZIP and Firefox XPI packaging in the tag-driven release workflow
-- Opt-in Try samples onboarding for six URL-only examples from the documented GitHub raw registry
+- Opt-in Try samples onboarding for seven starter providers from the documented GitHub raw source; four include reviewed taught metrics
 
 ## Changed
 

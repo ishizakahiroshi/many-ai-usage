@@ -1,4 +1,5 @@
 import type { AnchorFingerprint } from '../../shared/schema';
+import { BREAKDOWN_LABEL_PATTERN } from './legend';
 
 const MAX_NEARBY_LABEL = 40;
 /** Tailwind / utility classes change often on SPAs (Grok/Codex) — do not put them in taught selectors. */
@@ -8,6 +9,31 @@ const MAX_FINGERPRINT_SCAN = 6_000;
 
 function stableText(value: string): string {
   return value.replace(/-?\d+(?:[,.]\d+)?\s*%?/g, '#').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Read compact text without asking the DOM to materialize an element's complete subtree.
+ * Metric labels are small; a node that exceeds either budget is deliberately skipped.
+ */
+function boundedElementText(element: Element, maxChars: number, nodeBudget = 96): string | null {
+  const showText = element.ownerDocument.defaultView?.NodeFilter.SHOW_TEXT ?? 4;
+  const walker = element.ownerDocument.createTreeWalker(element, showText);
+  let text = '';
+  let count = 0;
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    count += 1;
+    if (count > nodeBudget) return null;
+    const value = node.nodeValue ?? '';
+    // Do not run a full-string regexp over a hostile multi-megabyte text node.
+    if (value.length > maxChars * 4) return null;
+    text += ` ${value}`;
+    if (text.length > maxChars * 4) return null;
+    const compact = text.replace(/\s+/g, ' ').trim();
+    if (compact.length > maxChars) return null;
+    text = compact;
+  }
+  return text;
 }
 
 function escapeCss(value: string): string {
@@ -27,9 +53,9 @@ export function textFingerprint(value: string): string {
 }
 
 function nearbyText(element: Element): string {
-  const own = element.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  const own = boundedElementText(element, 240) ?? '';
   const aria = element.getAttribute('aria-label')?.trim() ?? '';
-  const parent = element.parentElement?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  const parent = element.parentElement ? boundedElementText(element.parentElement, 240) ?? '' : '';
   const value = aria || (parent !== own ? parent : own);
   return value.slice(0, MAX_NEARBY_LABEL);
 }
@@ -104,7 +130,7 @@ export function createAnchorFingerprint(element: Element, root: Document = eleme
     selectors: selector ? [selector] : [],
     tagName: element.tagName.toLowerCase(),
     role: element.getAttribute('role') ?? undefined,
-    textFingerprint: textFingerprint(element.textContent ?? ''),
+    textFingerprint: textFingerprint(boundedElementText(element, 240) ?? ''),
     nearbyLabel: nearbyText(element),
   };
 }
@@ -115,7 +141,10 @@ export const buildAnchorFingerprint = createAnchorFingerprint;
 export function matchesFingerprint(element: Element, fingerprint: AnchorFingerprint): boolean {
   if (fingerprint.tagName && element.tagName.toLowerCase() !== fingerprint.tagName.toLowerCase()) return false;
   if (fingerprint.role && element.getAttribute('role') !== fingerprint.role) return false;
-  if (fingerprint.textFingerprint && textFingerprint(element.textContent ?? '') !== fingerprint.textFingerprint) return false;
+  if (fingerprint.textFingerprint) {
+    const text = boundedElementText(element, 240);
+    if (text == null || textFingerprint(text) !== fingerprint.textFingerprint) return false;
+  }
   if (fingerprint.nearbyLabel) {
     const label = nearbyText(element);
     if (!stableText(label).includes(stableText(fingerprint.nearbyLabel.slice(0, 20)))) return false;
@@ -149,7 +178,10 @@ export function findByFingerprint(root: Document, fingerprint: AnchorFingerprint
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
   // Prefer the most compact match when SPA re-renders leave multiple fingerprint hits.
-  return candidates.sort((left, right) => (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0))[0] ?? null;
+  return candidates.sort((left, right) => (
+    (boundedElementText(left, 240)?.length ?? Number.POSITIVE_INFINITY)
+    - (boundedElementText(right, 240)?.length ?? Number.POSITIVE_INFINITY)
+  ))[0] ?? null;
 }
 
 /**
@@ -166,21 +198,21 @@ export function findByLabelHint(
     .map((hint) => stableText((hint ?? '').slice(0, 40)))
     .filter((hint) => hint.length >= 2);
   if (needles.length === 0) return null;
-  const hits: Element[] = [];
+  const hits: Array<{ element: Element; length: number }> = [];
   walkElements(root, MAX_FINGERPRINT_SCAN, (element) => {
     if (exclude?.has(element)) return true;
     if (preferredTag && element.tagName.toLowerCase() !== preferredTag.toLowerCase()) return true;
-    const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (text.length === 0 || text.length > 100) return true;
+    const text = boundedElementText(element, 100);
+    if (!text) return true;
     const stable = stableText(text);
     if (!needles.some((needle) => stable.includes(needle))) return true;
     // Prefer leaves / shallow nodes that actually look like a metric chip.
     if (element.childElementCount > 6) return true;
-    hits.push(element);
+    hits.push({ element, length: text.length });
     return true;
   });
   if (hits.length === 0) return null;
-  return hits.sort((left, right) => (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0))[0] ?? null;
+  return hits.sort((left, right) => left.length - right.length)[0]?.element ?? null;
 }
 
 function scanHeadline(root: Document | Element, exclude?: ReadonlySet<Element>): Element | null {
@@ -188,15 +220,15 @@ function scanHeadline(root: Document | Element, exclude?: ReadonlySet<Element>):
   walkElements(root, MAX_FINGERPRINT_SCAN, (element) => {
     if (exclude?.has(element)) return true;
     if (element.childElementCount > 8) return true;
-    const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (text.length === 0 || text.length > 80) return true;
+    const text = boundedElementText(element, 80);
+    if (!text) return true;
     if (!/\d+(?:[.,]\d+)?\s*%/.test(text)) return true;
     let score = 0;
     if (/使用済|使用済み/i.test(text)) score += 100;
     if (/残り|remaining/i.test(text)) score += 80;
-    if (/(?:used|usage)\b/i.test(text) && !/(?:Grok\s*Build|チャット|Chat\b|API\b)/i.test(text)) score += 60;
+    if (/(?:used|usage)\b/i.test(text) && !BREAKDOWN_LABEL_PATTERN.test(text)) score += 60;
     // Demote legend chips under SuperGrok.
-    if (/(?:Grok\s*Build|チャット|Chat\b|API\b|Code\s*Review|コードレビュー)/i.test(text)) score -= 90;
+    if (BREAKDOWN_LABEL_PATTERN.test(text)) score -= 90;
     if (score <= 0) return true;
     // Prefer compact leaves that own the number.
     score += element.childElementCount === 0 ? 20 : Math.max(0, 10 - element.childElementCount);
@@ -229,8 +261,8 @@ function findAnchorContainer(root: Document | Element, hints: Array<string | und
   let match: Element | null = null;
   walkElements(root, MAX_FINGERPRINT_SCAN, (element) => {
     if (match) return false;
-    const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (text.length === 0 || text.length > 200) return true;
+    const text = boundedElementText(element, 200);
+    if (!text) return true;
     const stable = stableText(text);
     if (!needles.some((needle) => stable.includes(needle))) return true;
     match = element;

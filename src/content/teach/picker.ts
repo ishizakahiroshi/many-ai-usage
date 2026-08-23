@@ -1,8 +1,11 @@
 import type { MetricKind, MetricUnit, TaughtMetric } from '../../shared/schema';
 import type { PickerMode } from '../../shared/messages';
 import { diagLog, obsLog, perfLog, perfNow } from '../../shared/perf';
+import { urlForLog } from '../../shared/url';
 import { createAnchorFingerprint, textFingerprint } from './selector';
+import { createAccountAnchor } from './accountAnchor';
 import { extractValue, type ExtractedValue } from './extract';
+import { BREAKDOWN_SECTION_PATTERN } from './legend';
 import { inferResetLive, isResetLabelText } from './reset';
 
 let pickerHost: HTMLElement | null = null;
@@ -339,16 +342,6 @@ function bestExtractAtPoint(x: number, y: number): { element: Element | null; ex
   return { element: bestElement, extracted: best };
 }
 
-/** @deprecated internal alias — tests may still import via hover path */
-function bestHoverExtract(hit: Element): { element: Element; extracted: ExtractedValue } {
-  const rect = hit.getBoundingClientRect();
-  const x = rect.left + Math.min(rect.width / 2, 8);
-  const y = rect.top + Math.min(rect.height / 2, 8);
-  const atPoint = bestExtractAtPoint(x, y);
-  if (atPoint.element) return { element: atPoint.element, extracted: atPoint.extracted };
-  return { element: hit, extracted: extractValue(hit) };
-}
-
 function scoreHoverCandidate(
   x: number,
   y: number,
@@ -565,7 +558,7 @@ function isBreakdownLegendText(text: string): boolean {
   const compact = text.replace(/\s+/g, ' ').trim();
   if (!/\d+(?:[.,]\d+)?\s*%/.test(compact)) return false;
   // Product / channel labels next to a % — not the card summary.
-  if (/(?:Grok\s*Build|チャット|Chat\b|API\b|Code\s*Review|コードレビュー|内訳)/i.test(compact)) return true;
+  if (BREAKDOWN_SECTION_PATTERN.test(compact)) return true;
   // "Label 12%" without summary words, very short — typical legend row.
   if (
     compact.length <= 28
@@ -803,6 +796,8 @@ function detachPageCapture(): void {
   window.removeEventListener('pointerdown', onPointerDown, true);
   window.removeEventListener('pointerup', onPointerUp, true);
   window.removeEventListener('click', onClick, true);
+  // A queued trailing move must not fire after the listeners are gone (pause / Done / Cancel).
+  clearTrailingMove();
   captureListenersAttached = false;
 }
 
@@ -963,8 +958,55 @@ async function panelClick(event: Event): Promise<void> {
   }
 }
 
+/**
+ * mousemove fires per pixel of travel and each one runs a hit-test plus extractValue over the
+ * stack under the cursor. Leading-edge throttle: the first move of a gesture is handled at once
+ * (so the highlight never feels delayed), the rest collapse into one trailing run at the cursor's
+ * resting position. A repeat of the same coordinates is dropped outright.
+ */
+const HOVER_MIN_INTERVAL_MS = 40;
+let lastMoveAt = 0;
+let lastMoveX = Number.NaN;
+let lastMoveY = Number.NaN;
+let trailingMoveTimer: number | null = null;
+let trailingMoveEvent: MouseEvent | null = null;
+
+function clearTrailingMove(): void {
+  if (trailingMoveTimer != null) {
+    clearTimeout(trailingMoveTimer);
+    trailingMoveTimer = null;
+  }
+  trailingMoveEvent = null;
+}
+
 function onMove(event: MouseEvent): void {
   if (pickerPaused) return;
+  if (event.clientX === lastMoveX && event.clientY === lastMoveY) return;
+  const now = Date.now();
+  const sinceLast = now - lastMoveAt;
+  if (sinceLast < HOVER_MIN_INTERVAL_MS) {
+    trailingMoveEvent = event;
+    if (trailingMoveTimer == null) {
+      trailingMoveTimer = setTimeout(() => {
+        trailingMoveTimer = null;
+        const queued = trailingMoveEvent;
+        trailingMoveEvent = null;
+        if (!queued || pickerPaused) return;
+        lastMoveAt = Date.now();
+        lastMoveX = queued.clientX;
+        lastMoveY = queued.clientY;
+        handleMove(queued);
+      }, HOVER_MIN_INTERVAL_MS - sinceLast) as unknown as number;
+    }
+    return;
+  }
+  lastMoveAt = now;
+  lastMoveX = event.clientX;
+  lastMoveY = event.clientY;
+  handleMove(event);
+}
+
+function handleMove(event: MouseEvent): void {
   if (isPanelEvent(event)) {
     setHighlight(null);
     if (tooltip) tooltip.style.display = 'none';
@@ -1100,7 +1142,7 @@ function selectAtPoint(clientX: number, clientY: number): void {
     void chrome.runtime.sendMessage({
       type: 'SAVE_ACCOUNT_ANCHOR',
       providerId: activeProviderId,
-      accountAnchor: createAnchorFingerprint(element),
+      accountAnchor: createAccountAnchor(element),
       text: accountText(element),
     })
       .then((response: { saved?: boolean }) => {
@@ -1471,7 +1513,7 @@ export function startPicker(providerId: string, metricId?: string, pickerMode: P
   obsLog('picker.start', {
     providerId,
     pickerMode,
-    href: typeof location !== 'undefined' ? `${location.pathname}${location.search}` : '',
+    href: typeof location !== 'undefined' ? urlForLog(location.href) : '',
   });
 
   // Shell: popover host (top layer, NOT showModal — modal inert kills hit-testing on Grok).

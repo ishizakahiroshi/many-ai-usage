@@ -13,6 +13,11 @@ if (-not (Test-Path -LiteralPath $manifestPath)) { throw "Build output is missin
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 if ([string]::IsNullOrWhiteSpace($Version)) { $Version = "v$($manifest.version)" }
 if (-not $Version.StartsWith('v')) { $Version = "v$Version" }
+# $Version becomes part of the archive file name. Reject anything that is not a plain version so a
+# value like '../../etc/x' or '1.0;rm' can never steer the write outside dist/release-assets.
+if ($Version -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') {
+  throw "Version must look like v1.2.3 or v1.2.3-beta.1 (got: $Version)"
+}
 
 & (Join-Path $PSScriptRoot 'validate-extension.ps1') -Target $Target
 

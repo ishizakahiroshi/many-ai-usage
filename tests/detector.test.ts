@@ -59,4 +59,25 @@ describe('local usage detector', () => {
     expect(snapshot.metrics[0].unit).toBe('percent');
     expect(snapshot.metrics.some((metric) => metric.unit === 'requests' && metric.used === 18 && metric.total === 40)).toBe(true);
   });
+
+  it('never reports one percentage as both used and remaining', () => {
+    const snapshot = detectUsage(page('<section><h2>Weekly quota</h2><p>12% used of your remaining allowance</p></section>'), 'fixture:polarity', 'Synthetic AI');
+    const metric = snapshot.metrics[0];
+    expect(metric.used).toBe(12);
+    expect(metric.remaining).toBeNull();
+  });
+
+  it('keeps used and remaining readings of the same number as separate metrics', () => {
+    const snapshot = detectUsage(page('<section><h2>Weekly quota</h2><p>50% used</p><p>50% remaining</p></section>'), 'fixture:dedupe', 'Synthetic AI');
+    expect(snapshot.metrics.some((metric) => metric.used === 50)).toBe(true);
+    expect(snapshot.metrics.some((metric) => metric.remaining === 50)).toBe(true);
+  });
+
+  it('reads full-width digits and ignores an empty progress attribute', () => {
+    const wide = detectUsage(page('<section><h2>週間利用上限</h2><p>８０％ 残り</p></section>'), 'fixture:fullwidth', 'Synthetic AI');
+    expect(wide.metrics.some((metric) => metric.remaining === 80)).toBe(true);
+    // aria-valuenow="" used to read as 0 and stop the fallback to value="40".
+    const empty = detectUsage(page('<div aria-label="Monthly requests"><progress role="progressbar" aria-valuenow="" value="40" max="100"></progress></div>'), 'fixture:empty-attr', 'Synthetic AI');
+    expect(empty.metrics[0]?.evidence.value).toBe('40/100');
+  });
 });

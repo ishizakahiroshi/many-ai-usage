@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAnchorFingerprint } from '../src/content/teach/selector';
+import { createAnchorFingerprint, findByLabelHint, findUsageHeadline } from '../src/content/teach/selector';
 import { extractValue } from '../src/content/teach/extract';
 import { readTaught } from '../src/content/teach/read';
+import { isResetLabelText, parseResetText } from '../src/content/teach/reset';
 import { isPickerActive, isPickerPaused, makeMetric, startPicker, stopPicker } from '../src/content/teach/picker';
 import type { ProviderConfig } from '../src/shared/schema';
 
@@ -28,6 +29,23 @@ function mockHitTarget(getTarget: () => Element | null): void {
 }
 
 describe('teach-mode pure functions', () => {
+  it('does not materialize textContent for a huge scanned subtree', () => {
+    document.body.innerHTML = '';
+    const huge = document.createElement('section');
+    for (let index = 0; index < 150; index += 1) {
+      const child = document.createElement('span');
+      child.append(document.createTextNode(`synthetic-${index}`));
+      huge.append(child);
+    }
+    Object.defineProperty(huge, 'textContent', {
+      configurable: true,
+      get: () => { throw new Error('full subtree textContent was read'); },
+    });
+    document.body.append(huge);
+
+    expect(() => findByLabelHint(document, ['not-present'])).not.toThrow();
+    expect(() => findUsageHeadline(document, undefined, ['not-present'])).not.toThrow();
+  });
   afterEach(() => stopPicker());
   it('creates a re-selectable selector and fingerprint', () => {
     document.body.innerHTML = '<main><section><p class="quota">72% remaining</p></section></main>';
@@ -200,6 +218,16 @@ describe('teach-mode pure functions', () => {
     expect(extractValue(document.querySelector('div')!)).toMatchObject({ value: 60, total: 100, unit: 'percent' });
   });
 
+  it('keeps the percent invariant when a raw progress ratio has a nearby percent legend', () => {
+    document.body.innerHTML = '<div><span id="value" role="progressbar" aria-valuenow="3" aria-valuemax="5">3</span><span>Grok Build 44%</span></div>';
+    expect(extractValue(document.querySelector('#value')!)).toMatchObject({
+      value: 60,
+      remaining: 60,
+      total: 100,
+      unit: 'percent',
+    });
+  });
+
   it('rejects years and reset dates while preferring a real nearby percentage', () => {
     document.body.innerHTML = '<div id="reset">リセット: 2026/07/22</div><div id="card">週間利用上限 62% 残り リセット: 2026/07/22</div><div id="year">2026</div>';
     expect(extractValue(document.querySelector('#reset')!).value).toBeNull();
@@ -233,7 +261,7 @@ describe('teach-mode pure functions', () => {
   });
 
   it('infers Grok-style Japanese reset date next to 使用済', async () => {
-    const { parseResetText } = await import('../src/content/teach/reset');
+    const now = Date.parse('2026-07-16T00:00:00.000Z');
     document.body.innerHTML = `
       <section class="usage-card">
         <strong id="headline">66% 使用済</strong>
@@ -241,7 +269,7 @@ describe('teach-mode pure functions', () => {
         <div class="legend"><span>Grok Build 64%</span></div>
         <div id="reset">2026年7月24日 9:15 にリセット</div>
       </section>`;
-    expect(parseResetText('2026年7月24日 9:15 にリセット')).toBe(new Date(2026, 6, 24, 9, 15).toISOString());
+    expect(parseResetText('2026年7月24日 9:15 にリセット', now)).toBe(new Date(2026, 6, 24, 9, 15).toISOString());
     const metric = makeMetric(document.querySelector('#headline')!);
     expect(metric.resetAnchor).toBeDefined();
     const provider: ProviderConfig = {
@@ -258,9 +286,45 @@ describe('teach-mode pure functions', () => {
       updatedAt: new Date().toISOString(),
       order: 0,
     };
-    const snapshot = readTaught(document, provider, Date.parse('2026-07-16T00:00:00.000Z'));
+    const snapshot = readTaught(document, provider, now);
     expect(snapshot.metrics[0].resetLabel).toMatch(/リセット/);
     expect(snapshot.metrics[0].resetAt).toBe(new Date(2026, 6, 24, 9, 15).toISOString());
+  });
+
+  it('separates minute tokens from calendar-month reset tokens', () => {
+    const now = new Date(2024, 0, 31, 10, 20, 0, 0).getTime();
+    expect(parseResetText('Renews in 6 minutes', now)).toBe(new Date(now + 6 * 60_000).toISOString());
+    expect(parseResetText('Renews in 6 months', now)).toBe(new Date(2024, 6, 31, 10, 20, 0, 0).toISOString());
+    // Calendar-month addition clamps to the last real day instead of using a 30-day duration.
+    expect(parseResetText('Renews in 1 month', now)).toBe(new Date(2024, 1, 29, 10, 20, 0, 0).toISOString());
+    expect(parseResetText('1ヶ月後にリセット', now)).toBe(new Date(2024, 1, 29, 10, 20, 0, 0).toISOString());
+    expect(parseResetText('リセットまで 2 時間', now)).toBe(new Date(now + 2 * 60 * 60_000).toISOString());
+    expect(isResetLabelText('リセットまで 2 時間')).toBe(true);
+    expect(parseResetText('Renews in 1.5 months', now)).toBeNull();
+  });
+
+  it('validates absolute reset components and honors ISO timezone suffixes', () => {
+    const now = Date.parse('2026-07-01T00:00:00.000Z');
+    expect(parseResetText('Resets 2026-07-24T09:15Z', now)).toBe('2026-07-24T09:15:00.000Z');
+    expect(parseResetText('Resets 2026-07-24T09:15+09:00', now)).toBe('2026-07-24T00:15:00.000Z');
+    expect(parseResetText('Resets 2026-07-24T09:15:30.125+09:00', now)).toBe('2026-07-24T00:15:30.125Z');
+    expect(parseResetText('2026年7月24日 9:15 +09:00 にリセット', now)).toBe('2026-07-24T00:15:00.000Z');
+    expect(parseResetText('Resets 2028-02-29 09:15', now)).toBe(new Date(2028, 1, 29, 9, 15).toISOString());
+    expect(parseResetText('Resets 2026-13-01 09:15', now)).toBeNull();
+    expect(parseResetText('Resets 2026-02-29 09:15', now)).toBeNull();
+    expect(parseResetText('Resets 2026-07-24T25:15Z', now)).toBeNull();
+    expect(parseResetText('Resets 2026-07-24T09:15+15:00', now)).toBeNull();
+  });
+
+  it('rejects last-updated labels, bare 更新, and stale absolute reset times', () => {
+    const now = Date.parse('2026-07-16T00:00:00.000Z');
+    expect(isResetLabelText('Last updated 2026-07-15 09:15')).toBe(false);
+    expect(isResetLabelText('最終更新: 2026年7月15日 9:15')).toBe(false);
+    expect(isResetLabelText('更新: 2026-07-20 09:15')).toBe(false);
+    expect(parseResetText('Last updated 2026-07-20 09:15', now)).toBeNull();
+    expect(parseResetText('Resets 2026-07-01 09:15', now)).toBeNull();
+    expect(isResetLabelText('次回更新 2026-07-20 09:15')).toBe(true);
+    expect(parseResetText('次回更新 2026-07-20 09:15', now)).toBe(new Date(2026, 6, 20, 9, 15).toISOString());
   });
 
   it('reads a taught metric and reports missing anchors', () => {
@@ -350,6 +414,41 @@ describe('teach-mode pure functions', () => {
     expect(snapshot.metrics).toHaveLength(1);
     expect(snapshot.metrics[0].remaining).toBe(120);
     expect(snapshot.metrics[0].confidence).toBe('taught');
+  });
+
+  it('keeps an explicitly taught breakdown chip instead of replacing it with the page headline', () => {
+    document.body.innerHTML = `
+      <section>
+        <strong id="total">52% 使用済</strong>
+        <div><span id="build">Grok Build 49%</span><span>チャット 1%</span></div>
+      </section>`;
+    const provider: ProviderConfig = {
+      schema: 'many-ai-usage.provider.v1',
+      id: 'fixture:explicit-breakdown',
+      displayName: 'Synthetic AI',
+      url: 'https://example.test/usage',
+      urlMatch: [],
+      mode: 'taught',
+      displayEnabled: true,
+      refreshIntervalMinutes: 15,
+      metrics: [{
+        metricId: 'build',
+        label: 'Grok Build',
+        kind: 'percent',
+        unit: 'percent',
+        valueAnchor: createAnchorFingerprint(document.querySelector('#build')!),
+        interpretation: 'used_percent',
+        enabled: true,
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: 0,
+    };
+    const snapshot = readTaught(document, provider);
+    expect(snapshot.metrics).toHaveLength(1);
+    expect(snapshot.metrics[0]).toMatchObject({ used: 49, label: 'Grok Build', confidence: 'taught' });
+    expect(snapshot.metrics[0].evidence.semanticSignals).not.toContain('headline-fallback');
+    expect(snapshot.warningReason).toBeNull();
   });
 
   it('avoids baking Tailwind utility classes into taught selectors', () => {
@@ -630,6 +729,34 @@ describe('teach-mode pure functions', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(pickerShadow()?.querySelector('[data-count]')?.textContent).toBe('Saved: 0');
     expect(pickerShadow()?.querySelector('[data-hint]')?.textContent).toMatch(/No usage number/i);
+  });
+
+  it('throttles a burst of mousemove and still settles on the resting position', async () => {
+    document.body.innerHTML = '<div id="card"><strong id="weekly">85% 残り</strong></div>';
+    let hits = 0;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      writable: true,
+      value: () => { hits += 1; return document.querySelector('#weekly'); },
+    });
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      writable: true,
+      value: () => { hits += 1; return [document.querySelector('#weekly')!]; },
+    });
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage: vi.fn(async () => ({ saved: true, metrics: [] })) } };
+    startPicker('fixture:hover-throttle');
+    hits = 0;
+    for (let step = 0; step < 30; step += 1) {
+      window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, composed: true, clientX: 40 + step, clientY: 50 }));
+    }
+    const afterBurst = hits;
+    // The leading move runs; the other 29 collapse instead of each running a hit-test.
+    expect(afterBurst).toBeGreaterThan(0);
+    expect(afterBurst).toBeLessThan(30);
+    // The cursor's resting position is still processed once the throttle window closes.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(hits).toBeGreaterThan(afterBurst);
   });
 
   it('stages from hover cache when click hit-test misses (Codex popover top-layer)', async () => {

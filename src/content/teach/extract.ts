@@ -89,9 +89,10 @@ export function extractValue(element: Element): ExtractedValue {
       && preferred.unit === 'percent';
     if (!textHasBetterPercent) {
       const max = numberValue(element.getAttribute('aria-valuemax'));
-      // aria-valuenow is a raw count against aria-valuemax, not a percentage: convert when no
-      // explicit unit keyword was found nearby and we're about to report unit as 'percent'.
-      const forcePercent = max != null && max > 0 && unit === 'custom';
+      // aria-valuenow and aria-valuemax share one scale. When the surrounding context says the
+      // metric is a percentage (or supplies no count unit), normalize the ratio to percent rather
+      // than returning the inconsistent combination value=3, total=5, unit=percent.
+      const forcePercent = max != null && max > 0 && (unit === 'custom' || unit === 'percent');
       const value = forcePercent ? (ariaValue / max) * 100 : ariaValue;
       const resolvedTotal = forcePercent ? 100 : max;
       const resolvedUnit = forcePercent ? 'percent' : unit;

@@ -6,6 +6,8 @@ import {
   hashAccountKey,
   normalizeAccountText,
 } from '../src/shared/account';
+import { createAccountAnchor, readAccountAnchorText } from '../src/content/teach/accountAnchor';
+import { accountAnchorSelectorPattern, safeParseAccountAnchor } from '../src/shared/schema';
 
 // Synthetic identities only — never paste a real account address into a fixture.
 const SALT_A = 'a'.repeat(64);
@@ -40,5 +42,29 @@ describe('account identity hashing', () => {
   it('returns null when the element carries no identity', async () => {
     expect(await hashAccountKey('   ', SALT_A)).toBeNull();
     expect(await hashAccountKey('', SALT_A)).toBeNull();
+  });
+});
+
+describe('text-free account anchors', () => {
+  it('stores only a numeric DOM path even when every page attribute contains identity text', () => {
+    document.body.innerHTML = `
+      <main id="person-a@example.com" class="person-a@example.com">
+        <span aria-label="person-a@example.com">person-a@example.com</span>
+      </main>`;
+    const element = document.querySelector('span')!;
+    const anchor = createAccountAnchor(element);
+    const serialized = JSON.stringify(anchor);
+
+    expect(anchor.selector).toMatch(accountAnchorSelectorPattern);
+    expect(serialized).not.toContain('person-a');
+    expect(serialized).not.toContain('example.com');
+    expect(readAccountAnchorText(document, anchor)).toBe('person-a@example.com');
+  });
+
+  it('rejects extra fingerprint fields at the background trust boundary', () => {
+    const anchor = { selector: ':root > :nth-child(2) > :nth-child(1)' };
+    expect(safeParseAccountAnchor(anchor)).toEqual(anchor);
+    expect(safeParseAccountAnchor({ ...anchor, nearbyLabel: 'person-a@example.com' })).toBeNull();
+    expect(safeParseAccountAnchor({ selector: 'span[aria-label="person-a@example.com"]' })).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import { fetchSampleIconDataUrl, isAllowedSampleIconUrl } from './icon';
+import { fetchWithTimeout } from './fetch';
 import {
   assertStarterPackByteSize,
   parseProvidersRegistryResponse,
@@ -37,7 +38,7 @@ export function isSampleProviderId(id: string): boolean {
 }
 
 export async function fetchProvidersRegistry(): Promise<ProviderConfig[]> {
-  const response = await fetch(PROVIDERS_REGISTRY_URL, {
+  const response = await fetchWithTimeout(PROVIDERS_REGISTRY_URL, {
     cache: 'no-store',
     credentials: 'omit',
   });
@@ -86,7 +87,7 @@ async function loadStarterFromJson(json: unknown, now?: string): Promise<Provide
 }
 
 export async function fetchStarterPack(): Promise<ProviderConfig[]> {
-  const response = await fetch(STARTER_PACK_URL, {
+  const response = await fetchWithTimeout(STARTER_PACK_URL, {
     cache: 'no-store',
     credentials: 'omit',
   });

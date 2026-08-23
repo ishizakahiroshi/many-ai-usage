@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from './fetch';
+
 /**
  * Runtime locale loader.
  *
@@ -69,13 +71,13 @@ export async function setStoredUiLocale(code: string): Promise<void> {
 
 export function createTranslator(messages: MessageTable, fallback?: MessageTable): TranslateFn {
   return (key, vars) => {
-    let text = messages[key] ?? fallback?.[key] ?? key;
-    if (vars) {
-      for (const [name, value] of Object.entries(vars)) {
-        text = text.replaceAll(`{${name}}`, String(value));
-      }
-    }
-    return text;
+    const text = messages[key] ?? fallback?.[key] ?? key;
+    if (!vars) return text;
+    // One pass keeps replacement values literal: `$&` is not replacement syntax and a value
+    // containing another placeholder (for example `{status}`) is not interpolated again.
+    return text.replace(/\{([^{}]+)\}/g, (placeholder, name: string) => (
+      Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : placeholder
+    ));
   };
 }
 
@@ -120,7 +122,7 @@ function defaultLocalesBaseUrl(): string {
 }
 
 async function fetchJson<T>(url: string, fetchImpl: typeof fetch): Promise<T> {
-  const response = await fetchImpl(url, { cache: 'no-store', credentials: 'omit' });
+  const response = await fetchWithTimeout(url, { cache: 'no-store', credentials: 'omit' }, fetchImpl);
   if (!response.ok) throw new Error(`i18n load failed (${response.status}): ${url}`);
   return response.json() as Promise<T>;
 }

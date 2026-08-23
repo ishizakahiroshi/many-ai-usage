@@ -16,6 +16,13 @@ export const runtimeStatuses = [
 ] as const;
 export type RuntimeStatus = (typeof runtimeStatuses)[number];
 
+/**
+ * Consecutive failed taught reads before a provider is downgraded from `warning` to
+ * `needs_teaching`. One bad read is usually an SPA that unmounted the usage sheet, so the prompt
+ * to re-teach only appears once the page has stayed unreadable.
+ */
+export const NEEDS_TEACHING_FAILURE_THRESHOLD = 3;
+
 export const snapshotSources = ['dom', 'user_taught', 'page_only'] as const;
 export type SnapshotSource = (typeof snapshotSources)[number];
 export const snapshotStatuses = ['ok', 'warning', 'error', 'no_data'] as const;
@@ -34,6 +41,20 @@ export interface AnchorFingerprint {
   nearbyLabel?: string;
 }
 
+/**
+ * Text-free locator used only for account identity elements.
+ *
+ * Metric anchors intentionally keep labels/fingerprints for resilient reads. Account anchors
+ * must not: an aria-label, id, class, or nearby text can contain an email address. The selector
+ * grammar below stores only a numeric DOM path rooted at the document element.
+ */
+export interface AccountAnchor {
+  selector: string;
+}
+
+export const ACCOUNT_ANCHOR_SELECTOR_MAX_LENGTH = 768;
+export const accountAnchorSelectorPattern = /^:root(?: > :nth-child\([1-9]\d{0,3}\)){1,32}$/;
+
 export interface TaughtMetric {
   metricId: string;
   label: string;
@@ -48,6 +69,11 @@ export interface TaughtMetric {
 
 /** Max length of a browser-local custom icon data URL (resized PNG ~64×64 stays well under this). */
 export const ICON_DATA_URL_MAX_LENGTH = 100_000;
+/** Generous persistence/message bounds: large enough for real configs, finite for hostile input. */
+export const PROVIDER_COLLECTION_MAX_LENGTH = 128;
+export const PROVIDER_METRICS_MAX_LENGTH = 128;
+export const SNAPSHOT_METRICS_MAX_LENGTH = 128;
+export const PROVIDER_ID_MAX_LENGTH = 256;
 
 export interface ProviderConfig {
   schema: 'many-ai-usage.provider.v1';
@@ -66,8 +92,8 @@ export interface ProviderConfig {
    * (e.g. "personal" / "work"). Shown as the row label; the service name stays in displayName.
    */
   accountLabel?: string;
-  /** Where the account identity (email / display name) sits on the usage page. */
-  accountAnchor?: AnchorFingerprint;
+  /** Text-free structural path to the account identity (email / display name) on the page. */
+  accountAnchor?: AccountAnchor;
   /** Salted hash of the account identity text. The raw text is never stored (see shared/account.ts). */
   accountKeyHash?: string;
   /** Firefox container (cookieStoreId) this account lives in. Never set on Chrome. */
@@ -124,19 +150,27 @@ export interface ProviderRuntimeState {
 }
 
 const anchorSchema = v.object({
-  selectors: v.array(v.string()),
-  tagName: v.optional(v.string()),
-  role: v.optional(v.string()),
-  textFingerprint: v.optional(v.string()),
-  nearbyLabel: v.optional(v.string()),
+  selectors: v.pipe(v.array(v.pipe(v.string(), v.maxLength(2_048))), v.maxLength(32)),
+  tagName: v.optional(v.pipe(v.string(), v.maxLength(80))),
+  role: v.optional(v.pipe(v.string(), v.maxLength(160))),
+  textFingerprint: v.optional(v.pipe(v.string(), v.maxLength(512))),
+  nearbyLabel: v.optional(v.pipe(v.string(), v.maxLength(512))),
+});
+
+const accountAnchorSchema = v.object({
+  selector: v.pipe(
+    v.string(),
+    v.maxLength(ACCOUNT_ANCHOR_SELECTOR_MAX_LENGTH),
+    v.regex(accountAnchorSelectorPattern),
+  ),
 });
 
 const taughtMetricSchema = v.object({
-  metricId: v.string(),
-  label: v.string(),
+  metricId: v.pipe(v.string(), v.maxLength(PROVIDER_ID_MAX_LENGTH)),
+  label: v.pipe(v.string(), v.maxLength(200)),
   kind: v.picklist(metricKinds),
   unit: v.picklist(metricUnits),
-  windowLabel: v.optional(v.string()),
+  windowLabel: v.optional(v.pipe(v.string(), v.maxLength(200))),
   valueAnchor: v.optional(anchorSchema),
   resetAnchor: v.optional(anchorSchema),
   interpretation: v.optional(v.picklist(['used_percent', 'remaining_percent', 'used_total', 'remaining_total', 'absolute_value', 'reset_only', 'unknown'] as const)),
@@ -145,14 +179,14 @@ const taughtMetricSchema = v.object({
 
 export const providerConfigSchema = v.object({
   schema: v.literal('many-ai-usage.provider.v1'),
-  id: v.string(),
-  displayName: v.string(),
-  url: v.pipe(v.string(), v.url()),
-  urlMatch: v.array(v.string()),
+  id: v.pipe(v.string(), v.minLength(1), v.maxLength(PROVIDER_ID_MAX_LENGTH)),
+  displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  url: v.pipe(v.string(), v.maxLength(4_096), v.url()),
+  urlMatch: v.pipe(v.array(v.pipe(v.string(), v.maxLength(4_096))), v.maxLength(64)),
   mode: v.picklist(providerModes),
   displayEnabled: v.boolean(),
   refreshIntervalMinutes: v.pipe(v.number(), v.minValue(3), v.maxValue(240)),
-  metrics: v.array(taughtMetricSchema),
+  metrics: v.pipe(v.array(taughtMetricSchema), v.maxLength(PROVIDER_METRICS_MAX_LENGTH)),
   iconDataUrl: v.optional(v.pipe(
     v.string(),
     // svg+xml allowed for sample letter badges imported once from GitHub raw.
@@ -160,7 +194,7 @@ export const providerConfigSchema = v.object({
     v.maxLength(ICON_DATA_URL_MAX_LENGTH),
   )),
   accountLabel: v.optional(v.pipe(v.string(), v.maxLength(80))),
-  accountAnchor: v.optional(anchorSchema),
+  accountAnchor: v.optional(accountAnchorSchema),
   // Hash only — a provider carrying raw identity text must not validate.
   accountKeyHash: v.optional(v.pipe(v.string(), v.regex(accountKeyHashPattern))),
   cookieStoreId: v.optional(v.pipe(v.string(), v.maxLength(120))),
@@ -210,35 +244,88 @@ const starterPackSchema = v.object({
 
 export type StarterPack = v.InferOutput<typeof starterPackSchema>;
 
+const REMOTE_URL_MAX_LENGTH = 2_048;
+const REMOTE_PATTERN_LIMIT = 32;
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === 'localhost'
+    || normalized.endsWith('.localhost')
+    || normalized === '127.0.0.1'
+    || normalized === '[::1]';
+}
+
+function assertRemoteWebUrl(value: string): URL {
+  if (value.length === 0 || value.length > REMOTE_URL_MAX_LENGTH) {
+    throw new Error('Starter provider URL is too long');
+  }
+  const url = new URL(value);
+  const allowed = url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackHostname(url.hostname));
+  if (!allowed || url.username || url.password) {
+    throw new Error('Starter provider URL must use HTTPS (HTTP is limited to loopback hosts)');
+  }
+  return url;
+}
+
+function assertRemoteProviderNetworkPolicy(provider: { url: string; urlMatch: string[] }): void {
+  const providerUrl = assertRemoteWebUrl(provider.url);
+  if (provider.urlMatch.length === 0 || provider.urlMatch.length > REMOTE_PATTERN_LIMIT) {
+    throw new Error('Starter provider URL patterns are outside the allowed bounds');
+  }
+  for (const pattern of provider.urlMatch) {
+    if (pattern.length === 0 || pattern.length > REMOTE_URL_MAX_LENGTH) {
+      throw new Error('Starter provider URL pattern is outside the allowed bounds');
+    }
+    const firstWildcard = pattern.indexOf('*');
+    if (firstWildcard !== -1 && firstWildcard !== pattern.length - 1) {
+      throw new Error('Starter provider URL pattern may only end with a wildcard');
+    }
+    const prefix = firstWildcard === -1 ? pattern : pattern.slice(0, -1);
+    const patternUrl = assertRemoteWebUrl(prefix);
+    if (patternUrl.origin !== providerUrl.origin) {
+      throw new Error('Starter provider URL pattern must stay on the provider origin');
+    }
+    // `https://service.example*` compares equal by origin but is a host wildcard at match time.
+    // Keep the validator and shared/url.ts on one rule: a wildcard only ever stands for a path.
+    if (firstWildcard !== -1 && prefix.length <= patternUrl.origin.length) {
+      throw new Error('Starter provider URL pattern wildcard must apply to the path');
+    }
+  }
+}
+
 const normalizedMetricSchema = v.object({
-  id: v.string(),
-  label: v.string(),
+  id: v.pipe(v.string(), v.maxLength(PROVIDER_ID_MAX_LENGTH)),
+  label: v.pipe(v.string(), v.maxLength(200)),
   kind: v.picklist(metricKinds),
   unit: v.picklist(metricUnits),
-  window: v.object({ id: v.string(), label: v.string(), durationMs: v.optional(v.number()) }),
+  window: v.object({
+    id: v.pipe(v.string(), v.maxLength(PROVIDER_ID_MAX_LENGTH)),
+    label: v.pipe(v.string(), v.maxLength(200)),
+    durationMs: v.optional(v.number()),
+  }),
   used: v.nullable(v.number()),
   remaining: v.nullable(v.number()),
   total: v.nullable(v.number()),
   resetAt: v.nullable(v.pipe(v.string(), v.isoTimestamp())),
-  resetLabel: v.nullable(v.string()),
+  resetLabel: v.nullable(v.pipe(v.string(), v.maxLength(512))),
   confidence: v.picklist(['heuristic', 'taught'] as const),
   evidence: v.object({
-    value: v.string(),
-    label: v.nullable(v.string()),
-    reset: v.nullable(v.string()),
-    semanticSignals: v.array(v.string()),
+    value: v.pipe(v.string(), v.maxLength(2_048)),
+    label: v.nullable(v.pipe(v.string(), v.maxLength(512))),
+    reset: v.nullable(v.pipe(v.string(), v.maxLength(512))),
+    semanticSignals: v.pipe(v.array(v.pipe(v.string(), v.maxLength(128))), v.maxLength(32)),
   }),
 });
 
 export const normalizedSnapshotSchema = v.object({
-  providerId: v.string(),
-  displayName: v.string(),
+  providerId: v.pipe(v.string(), v.minLength(1), v.maxLength(PROVIDER_ID_MAX_LENGTH)),
+  displayName: v.pipe(v.string(), v.maxLength(200)),
   capturedAt: v.pipe(v.string(), v.isoTimestamp()),
   source: v.picklist(snapshotSources),
   status: v.picklist(snapshotStatuses),
-  metrics: v.array(normalizedMetricSchema),
-  warningReason: v.nullable(v.string()),
-  lastFailureReason: v.nullable(v.string()),
+  metrics: v.pipe(v.array(normalizedMetricSchema), v.maxLength(SNAPSHOT_METRICS_MAX_LENGTH)),
+  warningReason: v.nullable(v.pipe(v.string(), v.maxLength(2_048))),
+  lastFailureReason: v.nullable(v.pipe(v.string(), v.maxLength(2_048))),
 });
 
 export const runtimeStateSchema = v.object({
@@ -261,22 +348,46 @@ export function safeParseProvider(value: unknown): ProviderConfig | null {
   return result.success ? result.output : null;
 }
 
+/** Provider configs arriving from starter/import messages must retain the remote-origin policy. */
+export function safeParseRemoteProvider(value: unknown): ProviderConfig | null {
+  const provider = safeParseProvider(value);
+  if (!provider) return null;
+  try {
+    assertRemoteProviderNetworkPolicy(provider);
+    return provider;
+  } catch {
+    return null;
+  }
+}
+
+/** Runtime messages are not trusted by TypeScript; rebuild account anchors from one field only. */
+export function safeParseAccountAnchor(value: unknown): AccountAnchor | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const keys = Object.keys(value);
+  if (keys.length !== 1 || keys[0] !== 'selector') return null;
+  const result = v.safeParse(accountAnchorSchema, value);
+  return result.success ? result.output : null;
+}
+
 export function parseProvidersRegistryResponse(raw: unknown, now = new Date().toISOString()): ProviderConfig[] {
   const registry = v.parse(providersRegistrySchema, raw);
-  return registry.providers.map((provider, order) => ({
-    schema: 'many-ai-usage.provider.v1' as const,
-    id: provider.id,
-    displayName: provider.displayName,
-    url: provider.url,
-    urlMatch: provider.urlMatch,
-    mode: 'auto' as const,
-    displayEnabled: true,
-    refreshIntervalMinutes: 15,
-    metrics: [],
-    createdAt: now,
-    updatedAt: now,
-    order,
-  }));
+  return registry.providers.map((provider, order) => {
+    assertRemoteProviderNetworkPolicy(provider);
+    return {
+      schema: 'many-ai-usage.provider.v1' as const,
+      id: provider.id,
+      displayName: provider.displayName,
+      url: provider.url,
+      urlMatch: provider.urlMatch,
+      mode: 'auto' as const,
+      displayEnabled: true,
+      refreshIntervalMinutes: 15,
+      metrics: [],
+      createdAt: now,
+      updatedAt: now,
+      order,
+    };
+  });
 }
 
 export interface ParsedStarterPack {
@@ -294,6 +405,7 @@ export function parseStarterPackResponse(raw: unknown, now = new Date().toISOStr
   const pack = v.parse(starterPackSchema, raw);
   const sampleIconUrls: Record<string, string> = {};
   const providers = pack.providers.map((provider, order) => {
+    assertRemoteProviderNetworkPolicy(provider);
     if (provider.iconUrl) {
       // Allowed-host check lives in samples/icon so schema stays free of network policy.
       sampleIconUrls[provider.id] = provider.iconUrl;

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RuntimeMessage } from '../src/shared/messages';
 import type { ProviderConfig, TaughtMetric } from '../src/shared/schema';
 
 function provider(): ProviderConfig {
@@ -31,6 +32,8 @@ describe('background continuous teach sessions', () => {
   let getTab: ReturnType<typeof vi.fn>;
   let removeTab: ReturnType<typeof vi.fn>;
   let updateTab: ReturnType<typeof vi.fn>;
+
+  afterEach(() => vi.restoreAllMocks());
 
   beforeEach(async () => {
     vi.resetModules();
@@ -285,7 +288,11 @@ describe('background continuous teach sessions', () => {
 
     expect(result).toEqual({ refreshed: 1, skipped: 0, timedOut: 0 });
     // providerId pins the capture so a shared usage URL cannot write into another account's entry.
-    expect(sendTabMessage).toHaveBeenCalledWith(5, { type: 'CAPTURE_NOW', providerId: 'fixture:continuous' });
+    expect(sendTabMessage).toHaveBeenCalledWith(5, expect.objectContaining({
+      type: 'CAPTURE_NOW',
+      providerId: 'fixture:continuous',
+      requestId: expect.any(String),
+    }));
   });
 
   it('never redirects an ordinary matching chat tab during automatic capture', async () => {
@@ -346,6 +353,121 @@ describe('background continuous teach sessions', () => {
     expect(result).toEqual({ refreshed: 1, skipped: 0, timedOut: 0 });
     expect(createTab).toHaveBeenCalledWith({ url: 'https://example.test/usage', active: false });
     expect(updateTab).not.toHaveBeenCalledWith(5, expect.objectContaining({ url: 'https://example.test/usage' }));
+  });
+
+  it('does not capture when navigation lands off the usage entry (same-origin redirect)', async () => {
+    state.providers[0] = {
+      ...provider(),
+      urlMatch: ['https://example.test/*'],
+    };
+    (chrome.tabs.query as any) = vi.fn(async () => [{ id: 5, url: 'https://example.test/chat' }]);
+    // The tab is asked to go to /usage but the server keeps redirecting back to /chat, which the
+    // broad urlMatch still accepts. Capture must not start there.
+    getTab.mockImplementation(async (tabId: number) => ({
+      id: tabId,
+      url: 'https://example.test/chat',
+      status: 'complete',
+    }));
+    const executeScript = vi.fn(async () => []);
+    (chrome as any).scripting.executeScript = executeScript;
+    sendTabMessage.mockClear();
+
+    const result = await background.handleMessage({ type: 'REFRESH_PROVIDER', providerId: 'fixture:continuous' }) as { started: boolean };
+
+    expect(result.started).toBe(true);
+    expect(updateTab).toHaveBeenCalledWith(5, expect.objectContaining({ url: 'https://example.test/usage' }));
+    expect(executeScript).not.toHaveBeenCalled();
+    expect(sendTabMessage).not.toHaveBeenCalledWith(5, expect.objectContaining({ type: 'CAPTURE_NOW' }));
+  }, 15_000);
+
+  it('retires a refresh moved to another tab and rejects the old tab result', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(123_456);
+    (chrome.tabs.query as any) = vi.fn(async () => []);
+    createTab.mockImplementation(async () => ({ id: 99, url: 'https://example.test/usage', status: 'loading' }));
+    removeTab.mockClear();
+
+    const firstRefresh = background.handleMessage({ type: 'REFRESH_DASHBOARD' });
+    await vi.waitFor(() => expect(createTab).toHaveBeenCalled());
+
+    (chrome.tabs.query as any) = vi.fn(async () => [
+      { id: 5, active: true, url: 'https://example.test/usage', status: 'complete' },
+    ]);
+    const replacement = await background.handleMessage({
+      type: 'REFRESH_PROVIDER',
+      providerId: 'fixture:continuous',
+    }) as { requestId: string };
+
+    expect(removeTab).toHaveBeenCalledTimes(1);
+    expect(removeTab).toHaveBeenCalledWith(99);
+    const oldRequestId = `refresh-${(123_456).toString(36)}-1`;
+    expect(replacement.requestId).not.toBe(oldRequestId);
+    const snapshot = {
+      providerId: 'fixture:continuous',
+      displayName: 'Synthetic AI',
+      capturedAt: '2026-08-23T12:00:00.000Z',
+      source: 'user_taught' as const,
+      status: 'ok' as const,
+      metrics: [],
+      warningReason: null,
+      lastFailureReason: null,
+    };
+
+    expect(await background.handleMessage({
+      type: 'CAPTURE_RESULT',
+      providerId: 'fixture:continuous',
+      requestId: oldRequestId,
+      snapshot,
+    }, { tab: { id: 99 } } as chrome.runtime.MessageSender)).toEqual({ ok: false, error: 'stale_capture_result' });
+    expect(state['snapshot:fixture:continuous']).toBeUndefined();
+
+    expect(await background.handleMessage({
+      type: 'CAPTURE_RESULT',
+      providerId: 'fixture:continuous',
+      requestId: replacement.requestId,
+      snapshot,
+    }, { tab: { id: 5 } } as chrome.runtime.MessageSender)).toEqual({ ok: true });
+    expect(state['snapshot:fixture:continuous']).toMatchObject({ providerId: 'fixture:continuous' });
+    await firstRefresh;
+  });
+
+  it('validates provider and snapshot mutation messages before storage writes', async () => {
+    const before = structuredClone(state.providers);
+    const oversized = {
+      ...provider(),
+      metrics: Array.from({ length: 129 }, (_, index) => metric(`metric-${index}`, `Metric ${index}`)),
+    };
+    expect(await background.handleMessage({
+      type: 'UPSERT_PROVIDER',
+      provider: oversized,
+      permissionGranted: true,
+    } as unknown as RuntimeMessage)).toEqual({ saved: false, error: 'invalid_provider' });
+    expect(state.providers).toEqual(before);
+
+    const crossOrigin = {
+      ...provider(),
+      id: 'sample:cross-origin',
+      urlMatch: ['https://other.example/*'],
+    };
+    expect(await background.handleMessage({
+      type: 'APPLY_STARTER_PROVIDERS',
+      providers: [crossOrigin],
+    } as unknown as RuntimeMessage)).toMatchObject({ error: 'invalid_starter_providers' });
+    expect(state.providers).toEqual(before);
+
+    expect(await background.handleMessage({
+      type: 'CAPTURE_RESULT',
+      providerId: 'fixture:continuous',
+      snapshot: {
+        providerId: 'fixture:different',
+        displayName: 'Synthetic AI',
+        capturedAt: '2026-08-23T12:00:00.000Z',
+        source: 'user_taught',
+        status: 'ok',
+        metrics: [],
+        warningReason: null,
+        lastFailureReason: null,
+      },
+    })).toEqual({ ok: false, error: 'invalid_capture_result' });
   });
 
   it('opens options by re-navigating an existing tab (zombie after extension reload)', async () => {
@@ -507,7 +629,7 @@ describe('background continuous teach sessions', () => {
       await background.handleMessage({
         type: 'SAVE_ACCOUNT_ANCHOR',
         providerId,
-        accountAnchor: { selectors: ['#account'] },
+        accountAnchor: { selector: ':root > :nth-child(2) > :nth-child(1)' },
         text,
       }, { tab: { id: 5 } } as chrome.runtime.MessageSender);
     }
@@ -526,12 +648,29 @@ describe('background continuous teach sessions', () => {
       const saved = await background.handleMessage({
         type: 'SAVE_ACCOUNT_ANCHOR',
         providerId: 'fixture:account-b',
-        accountAnchor: { selectors: ['#account'] },
+        accountAnchor: { selector: ':root > :nth-child(2) > :nth-child(1)' },
         text: IDENTITY_B,
       }, { tab: { id: 5 } } as chrome.runtime.MessageSender);
       expect(saved).toEqual({ saved: true });
       const stored = (state.providers as ProviderConfig[]).find((item) => item.id === 'fixture:account-b');
       expect(stored?.accountKeyHash).toMatch(/^[0-9a-f]{32}$/);
+      expect(JSON.stringify(state)).not.toContain(IDENTITY_B);
+    });
+
+    it('rejects an account anchor carrying page text even when a runtime sender bypasses TypeScript', async () => {
+      state.providers = [provider(), secondAccount()];
+      const malicious = {
+        type: 'SAVE_ACCOUNT_ANCHOR',
+        providerId: 'fixture:account-b',
+        accountAnchor: {
+          selector: ':root > :nth-child(2) > :nth-child(1)',
+          nearbyLabel: IDENTITY_B,
+        },
+        text: IDENTITY_B,
+      } as unknown as RuntimeMessage;
+
+      expect(await background.handleMessage(malicious, { tab: { id: 5 } } as chrome.runtime.MessageSender))
+        .toEqual({ saved: false });
       expect(JSON.stringify(state)).not.toContain(IDENTITY_B);
     });
 
@@ -574,7 +713,11 @@ describe('background continuous teach sessions', () => {
       state.providers = [provider(), secondAccount()];
       sendTabMessage.mockClear();
       await background.handleMessage({ type: 'REFRESH_PROVIDER', providerId: 'fixture:account-b' });
-      expect(sendTabMessage).toHaveBeenCalledWith(5, { type: 'CAPTURE_NOW', providerId: 'fixture:account-b' });
+      expect(sendTabMessage).toHaveBeenCalledWith(5, expect.objectContaining({
+        type: 'CAPTURE_NOW',
+        providerId: 'fixture:account-b',
+        requestId: expect.any(String),
+      }));
     });
 
     it('lets Done finish a session where only the account was taught', async () => {
@@ -583,7 +726,7 @@ describe('background continuous teach sessions', () => {
       await background.handleMessage({
         type: 'SAVE_ACCOUNT_ANCHOR',
         providerId: 'fixture:continuous',
-        accountAnchor: { selectors: ['#account'] },
+        accountAnchor: { selector: ':root > :nth-child(2) > :nth-child(1)' },
         text: IDENTITY_A,
       }, sender);
       expect(await background.handleMessage({ type: 'DONE_TEACH', providerId: 'fixture:continuous' }, sender))

@@ -1,0 +1,20 @@
+version: 2
+
+# Actions are pinned to full commit SHAs (see .github/workflows/*.yml). Dependabot is what keeps
+# those pins current: it opens a PR per update with the tag comment rewritten, so every action
+# bump is reviewed as a diff and validated by ci.yml before it can reach the release workflow.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

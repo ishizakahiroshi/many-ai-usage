@@ -55,6 +55,8 @@ opencode.json*
 *.local.json
 scripts/local/
 docs/local/
+# 監査プロンプト集（ai-audit-prompts）の report 証跡。内部調査ログのため公開しない
+/docs/ai-audit-prompts/
 
 # === 認証情報・secrets・鍵（public へ絶対に出さない） ===
 *.pem

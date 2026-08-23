@@ -1,4 +1,4 @@
-import type { AnchorFingerprint, NormalizedSnapshot, ProviderConfig, TaughtMetric } from './schema';
+import type { AccountAnchor, AnchorFingerprint, NormalizedSnapshot, ProviderConfig, TaughtMetric } from './schema';
 
 /** 'account' teaches which signed-in account a page belongs to (multi-account providers). */
 export type PickerMode = 'metrics' | 'reset' | 'account';
@@ -7,17 +7,17 @@ export type RuntimeMessage =
   | { type: 'GET_DASHBOARD' }
   | { type: 'GET_PROVIDER_CONTEXT'; url: string }
   | { type: 'PING' }
-  | { type: 'CAPTURE_RESULT'; providerId: string; snapshot: NormalizedSnapshot }
-  | { type: 'CAPTURE_FAILURE'; providerId: string; reason: string }
+  | { type: 'CAPTURE_RESULT'; providerId: string; snapshot: NormalizedSnapshot; requestId?: string }
+  | { type: 'CAPTURE_FAILURE'; providerId: string; reason: string; requestId?: string }
   /**
    * providerId pins the capture to one entry. Several providers can share a usage URL
    * (multi-account), and without it a refresh of the second entry used to overwrite the first.
    */
-  | { type: 'CAPTURE_NOW'; force?: boolean; providerId?: string }
+  | { type: 'CAPTURE_NOW'; force?: boolean; providerId?: string; requestId?: string }
   /** Ask the background worker which multi-account entry the page currently shows. */
   | { type: 'RESOLVE_ACCOUNT'; readings: Array<{ providerId: string; text: string }> }
   /** Store where the account identity sits. The text is hashed in the worker and never stored raw. */
-  | { type: 'SAVE_ACCOUNT_ANCHOR'; providerId: string; accountAnchor: AnchorFingerprint; text: string }
+  | { type: 'SAVE_ACCOUNT_ANCHOR'; providerId: string; accountAnchor: AccountAnchor; text: string }
   | { type: 'REFRESH_PROVIDER'; providerId: string }
   /** Re-read every permitted provider when the user explicitly refreshes the dashboard. */
   | { type: 'REFRESH_DASHBOARD' }
@@ -26,6 +26,7 @@ export type RuntimeMessage =
   | { type: 'REQUEST_PERMISSION'; providerId: string }
   | { type: 'SYNC_PERMISSION'; providerId: string; granted: boolean }
   | { type: 'UPSERT_PROVIDER'; provider: ProviderConfig; permissionGranted: boolean }
+  | { type: 'APPLY_STARTER_PROVIDERS'; providers: ProviderConfig[]; replaceExisting?: boolean }
   | { type: 'DELETE_PROVIDER'; providerId: string }
   | { type: 'REORDER_PROVIDERS'; ids: string[] }
   | { type: 'START_PICKER'; providerId: string; metricId?: string; pickerMode?: PickerMode }

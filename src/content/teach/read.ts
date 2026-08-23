@@ -1,6 +1,8 @@
 import type { AnchorFingerprint, NormalizedMetric, NormalizedSnapshot, ProviderConfig, TaughtMetric } from '../../shared/schema';
 import { diagLog } from '../../shared/perf';
+import { urlForLog } from '../../shared/url';
 import { extractValue, type ExtractedValue } from './extract';
+import { BREAKDOWN_LABEL_PATTERN } from './legend';
 import { findByFingerprint, findByLabelHint, findUsageHeadline } from './selector';
 import { parseResetText } from './reset';
 
@@ -45,7 +47,11 @@ function resolvePath(document: Document, metric: TaughtMetric): {
   const byLabel = findByLabelHint(document, [metric.label, anchor.nearbyLabel, metric.windowLabel], anchor.tagName)
     ?? findByLabelHint(document, [metric.label, anchor.nearbyLabel, metric.windowLabel]);
   if (byLabel && extractValue(byLabel).value != null) return { element: byLabel, path: 'label' };
-  return { element: byFingerprint ?? byLabel, path: byFingerprint || byLabel ? 'fingerprint' : 'none' };
+  // Last resort: an element was found but carries no readable value. Report which lookup produced
+  // it — calling a label hit 'fingerprint' here made read failures unreadable in diagnostics.
+  if (byFingerprint) return { element: byFingerprint, path: 'fingerprint' };
+  if (byLabel) return { element: byLabel, path: 'label' };
+  return { element: null, path: 'none' };
 }
 
 export function resolveAnchor(document: Document, anchor: AnchorFingerprint): Element | null {
@@ -76,11 +82,11 @@ export function readAnchorText(document: Document, anchor: AnchorFingerprint): s
 function looksLikeBreakdownChip(text: string): boolean {
   const compact = text.replace(/\s+/g, ' ').trim();
   return /\d+(?:[.,]\d+)?\s*%/.test(compact)
-    && /(?:Grok\s*Build|チャット|Chat\b|API\b|Code\s*Review|コードレビュー)/i.test(compact);
+    && BREAKDOWN_LABEL_PATTERN.test(compact);
 }
 
 function labelLooksLikeBreakdown(label: string): boolean {
-  return /(?:Grok\s*Build|チャット|Chat\b|API\b|Code\s*Review|コードレビュー)/i.test(label);
+  return BREAKDOWN_LABEL_PATTERN.test(label);
 }
 
 function normalizedValues(metric: TaughtMetric, extracted: ExtractedValue, headlineFallback: boolean): Pick<NormalizedMetric, 'used' | 'remaining' | 'total'> {
@@ -112,7 +118,7 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
   diagLog('read.start', {
     providerId: provider.id,
     taughtCount: taughtList.length,
-    href: typeof location !== 'undefined' ? `${location.pathname}${location.search}` : '',
+    href: typeof location !== 'undefined' ? urlForLog(location.href) : '',
     bodyChildren: document.body?.childElementCount ?? 0,
   });
   for (const taught of taughtList) {
@@ -121,12 +127,12 @@ export function readTaught(document: Document, provider: ProviderConfig, now = D
     let resolveVia: 'selector' | 'fingerprint' | 'label' | 'headline' | 'none' = resolved.path;
     let headlineFallback = false;
     let extracted = element ? extractValue(element) : null;
-    // Only the resolved evidence (not the taught label) decides "this looks like a legend
-    // chip": a metric named e.g. "API credits" on an unrelated provider must not be discarded
-    // purely for its label containing one of these common words when resolution succeeded.
+    // A live taught selector is the user's explicit choice, including a deliberately selected
+    // breakdown chip. Once that selector is stale, headline recovery remains available for a
+    // missing value or a breakdown-like soft recovery; a valid non-breakdown recovery is kept.
     const preferHeadline = !element
       || extracted?.value == null
-      || (extracted ? looksLikeBreakdownChip(extracted.evidence) : false);
+      || (resolved.path !== 'selector' && extracted != null && looksLikeBreakdownChip(extracted.evidence));
     if (preferHeadline) {
       // Legend chips (Grok Build / チャット / API) are not the SuperGrok total the user wants.
       const headline = findUsageHeadline(document, usedHeadlineElements, [taught.label, taught.windowLabel, taught.valueAnchor?.nearbyLabel]);

@@ -100,7 +100,7 @@
   "options.chooseImage": "Choose image",
   "options.refreshInterval": "Refresh interval (minutes)",
   "options.mode": "Mode",
-  "options.modeAuto": "Auto detect (candidate preview)",
+  "options.modeAuto": "Auto (page tile until you track a value)",
   "options.modeTaught": "User taught",
   "options.modeEmbed": "Page tile",
   "options.teachTitle": "Teach this page",

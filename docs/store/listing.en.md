@@ -14,7 +14,7 @@ many-ai-usage reads the visible values that you choose on a registered usage pag
 
 Key features:
 
-- Start empty, or explicitly fetch six URL-only examples with Try samples
+- Start empty, or explicitly fetch seven starter providers; four include reviewed taught metrics
 - Open a dedicated picker tab and teach multiple visible usage values in one continuous session
 - Rename or remove individual metrics and automatically associate nearby reset labels
 - Re-find the value after page changes using a selector and fingerprint
@@ -24,14 +24,14 @@ Key features:
 Privacy:
 
 - No data is sent to an external server
-- No cookies, tokens, page HTML, or account identifiers are collected
+- No cookies, tokens, page HTML, account identity text, or usage values are transmitted externally
 - Usage capture is read-only
 
 Permissions:
 
 - `storage`: store settings, taught selectors, and local snapshots
 - `tabs` / `scripting`: find registered pages and run the local reader
-- Fixed GitHub raw host access: fetch the documented URL-only sample registry only after the user confirms Try samples
+- Fixed GitHub raw host access: fetch the documented starter configuration and sample letter-badge icons only after the user confirms Try samples
 - Optional host access: read only registered usage pages after the user grants access
 
 Suggested category: Productivity

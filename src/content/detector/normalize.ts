@@ -31,7 +31,10 @@ export function normalizeCandidates(
     const kind = kindFor(unit);
     const reset = closestReset(candidate, resets);
     const label = candidate.label?.slice(0, 120) ?? `${candidate.windowLabel} quota`;
-    const key = `${kind}:${candidate.windowLabel}:${candidate.value}:${candidate.total}`;
+    // Polarity belongs in the key: "80% used" and "80% remaining" are different readings and
+    // the second one must not be dropped as a duplicate of the first.
+    const polarity = candidate.used != null ? 'used' : candidate.remaining != null ? 'remaining' : 'none';
+    const key = `${kind}:${candidate.windowLabel}:${polarity}:${candidate.value}:${candidate.total}`;
     if (seen.has(key)) continue;
     seen.add(key);
     let used = candidate.used;

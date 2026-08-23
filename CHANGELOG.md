@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Opt-in **Try samples** onboarding for six URL-only provider examples fetched from the documented GitHub raw registry.
+- Opt-in **Try samples** onboarding for seven starter providers fetched from this repository's documented GitHub raw starter; four include reviewed taught metrics.
 - Empty-state links to the Japanese usage guide in the popup and options page.
 
 ### Changed

@@ -42,6 +42,19 @@ describe('provider schema', () => {
     expect(safeParseProvider({ ...provider(), iconDataUrl: 'data:text/plain;base64,YQ==' })).toBeNull();
   });
 
+  it('accepts only text-free structural account anchors', () => {
+    expect(safeParseProvider({
+      ...provider(),
+      accountAnchor: { selector: ':root > :nth-child(2) > :nth-child(1)' },
+      accountKeyHash: 'a'.repeat(32),
+    })?.accountAnchor).toEqual({ selector: ':root > :nth-child(2) > :nth-child(1)' });
+    expect(safeParseProvider({
+      ...provider(),
+      accountAnchor: { selectors: ['span[aria-label="person-a@example.com"]'], nearbyLabel: 'person-a@example.com' },
+      accountKeyHash: 'a'.repeat(32),
+    })).toBeNull();
+  });
+
   it('keeps the runtime status separate from page-only source', () => {
     expect(makeRuntimeState('sample:test', 'needs_permission').status).toBe('needs_permission');
   });
@@ -90,6 +103,17 @@ describe('remote providers registry', () => {
 
   it('rejects malformed provider data', () => {
     expect(() => parseProvidersRegistryResponse({ ...registry, providers: [{ id: '', displayName: 'Broken', url: 'not-a-url', urlMatch: [] }] })).toThrow();
+  });
+
+  it('rejects non-web and cross-origin registry navigation', () => {
+    expect(() => parseProvidersRegistryResponse({
+      ...registry,
+      providers: [{ ...registry.providers[0], url: 'javascript:alert(1)' }],
+    })).toThrow();
+    expect(() => parseProvidersRegistryResponse({
+      ...registry,
+      providers: [{ ...registry.providers[0], urlMatch: ['https://other.example/*'] }],
+    })).toThrow();
   });
 });
 
@@ -147,5 +171,34 @@ describe('starter pack schema', () => {
 
   it('rejects an unknown starter schema', () => {
     expect(() => parseStarterPackResponse({ ...starter, schema: 'many-ai-usage.starter.v0' })).toThrow();
+  });
+
+  it('rejects unsafe schemes and cross-origin starter patterns while allowing loopback HTTP', () => {
+    const first = starter.providers[0]!;
+    expect(() => parseStarterPackResponse({
+      ...starter,
+      providers: [{ ...first, url: 'data:text/html,fixture', urlMatch: ['data:text/html,*'] }],
+    })).toThrow();
+    expect(() => parseStarterPackResponse({
+      ...starter,
+      providers: [{ ...first, urlMatch: ['https://other.example/*'] }],
+    })).toThrow();
+    expect(parseStarterPackResponse({
+      ...starter,
+      providers: [{ ...first, url: 'http://localhost:11434/usage', urlMatch: ['http://localhost:11434/*'] }],
+    }).providers[0]?.url).toBe('http://localhost:11434/usage');
+  });
+
+  it('rejects a host-level wildcard that only compares equal before the path', () => {
+    const first = starter.providers[0]!;
+    const origin = new URL(first.url).origin;
+    expect(() => parseStarterPackResponse({
+      ...starter,
+      providers: [{ ...first, urlMatch: [`${origin}*`] }],
+    })).toThrow();
+    expect(parseStarterPackResponse({
+      ...starter,
+      providers: [{ ...first, urlMatch: [`${origin}/*`] }],
+    }).providers[0]?.urlMatch).toEqual([`${origin}/*`]);
   });
 });

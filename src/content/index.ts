@@ -2,14 +2,15 @@ import type { PickerMode, ProviderContext } from '../shared/messages';
 import type { NormalizedSnapshot, ProviderConfig } from '../shared/schema';
 import { diagLog, perfLog, perfNow } from '../shared/perf';
 import { sendMessage } from '../shared/runtime';
-import { readAnchorText, readTaught } from './teach/read';
+import { urlForLog } from '../shared/url';
+import { readAccountAnchorText } from './teach/accountAnchor';
+import { CaptureRequestQueue, type CaptureRequest } from './captureQueue';
+import { readTaught } from './teach/read';
 import { isPickerActive, startPicker } from './teach/picker';
 
 let lastCapturedUrl: string | null = null;
 let captureInFlight = false;
-let captureQueued = false;
-/** Keeps a queued refresh pinned to the entry it was requested for (multi-account URLs). */
-let queuedProviderId: string | undefined;
+const captureQueue = new CaptureRequestQueue();
 
 function urlKey(): string {
   const url = new URL(location.href);
@@ -50,7 +51,7 @@ async function waitForHydration(): Promise<void> {
       resolve();
     }
   });
-  perfLog('content.waitForHydration', startedAt, { href: location.href }, 100);
+  perfLog('content.waitForHydration', startedAt, { href: urlForLog(location.href) }, 100);
 }
 
 /** Mismatch is an ordinary state on a shared usage URL — another account is simply signed in. */
@@ -82,7 +83,7 @@ async function resolveTargetProvider(context: ProviderContext, forcedProviderId?
   }
   const scope = forced?.accountKeyHash ? [forced] : identified;
   const readings = scope
-    .map((item) => ({ providerId: item.id, text: item.accountAnchor ? readAnchorText(document, item.accountAnchor) : null }))
+    .map((item) => ({ providerId: item.id, text: item.accountAnchor ? readAccountAnchorText(document, item.accountAnchor) : null }))
     .filter((item): item is { providerId: string; text: string } => item.text != null);
   if (readings.length === 0) return { provider: null, reason: 'account_anchor_unreadable' };
   const resolved = await sendMessage<{ providerId: string | null }>({ type: 'RESOLVE_ACCOUNT', readings });
@@ -96,11 +97,21 @@ async function resolveTargetProvider(context: ProviderContext, forcedProviderId?
   return { provider: match };
 }
 
-async function capture(force = false, forcedProviderId?: string): Promise<void> {
+async function reportDroppedCapture(request: CaptureRequest): Promise<void> {
+  if (!request.providerId) return;
+  await sendMessage({
+    type: 'CAPTURE_FAILURE',
+    providerId: request.providerId,
+    requestId: request.requestId,
+    reason: 'Capture request queue was full.',
+  });
+}
+
+async function capture(force = false, forcedProviderId?: string, requestId?: string): Promise<void> {
   if (captureInFlight) {
     if (force) {
-      captureQueued = true;
-      queuedProviderId = forcedProviderId;
+      const queued = captureQueue.enqueue({ providerId: forcedProviderId, requestId, reason: 'forced_refresh' });
+      if (queued.dropped) void reportDroppedCapture(queued.dropped);
     }
     return;
   }
@@ -111,7 +122,7 @@ async function capture(force = false, forcedProviderId?: string): Promise<void> 
   try {
     const context = await sendMessage<ProviderContext | null>({ type: 'GET_PROVIDER_CONTEXT', url: location.href });
     if (!context?.permissionGranted) {
-      diagLog('content.capture.skip', { reason: 'no-context-or-permission', href: location.href });
+      diagLog('content.capture.skip', { reason: 'no-context-or-permission', href: urlForLog(location.href) });
       return;
     }
     const resolution = await resolveTargetProvider(context, forcedProviderId);
@@ -128,6 +139,7 @@ async function capture(force = false, forcedProviderId?: string): Promise<void> 
         await sendMessage({
           type: 'CAPTURE_FAILURE',
           providerId: forcedProviderId,
+          requestId,
           reason: mismatched ? ACCOUNT_MISMATCH_REASON : ACCOUNT_UNKNOWN_REASON,
         });
       }
@@ -139,7 +151,7 @@ async function capture(force = false, forcedProviderId?: string): Promise<void> 
       providerId: provider.id,
       candidates: context.candidates?.length ?? 1,
       taughtCount: provider.metrics.filter((m) => m.enabled && m.valueAnchor).length,
-      href: `${location.pathname}${location.search}`,
+      href: urlForLog(location.href),
     });
     await waitForHydration();
     const readStartedAt = perfNow();
@@ -149,7 +161,7 @@ async function capture(force = false, forcedProviderId?: string): Promise<void> 
         ? readTaught(document, provider)
         : {
           ...pageOnlySnapshot(provider),
-          warningReason: 'Auto detection is preview-only. Track the exact usage element to show a metric.',
+          warningReason: 'Auto mode shows a page tile until you track an exact usage element.',
         };
     // Grok-style usage sheets mount after first paint — retry while taught metrics stay empty.
     if (
@@ -175,7 +187,7 @@ async function capture(force = false, forcedProviderId?: string): Promise<void> 
       metrics: snapshot.metrics.length,
       warning: Boolean(snapshot.warningReason),
     });
-    await sendMessage({ type: 'CAPTURE_RESULT', providerId: provider.id, snapshot });
+    await sendMessage({ type: 'CAPTURE_RESULT', providerId: provider.id, snapshot, requestId });
     lastCapturedUrl = key;
   } catch (error) {
     diagLog('content.capture.error', { name: error instanceof Error ? error.name : 'unknown' });
@@ -184,17 +196,18 @@ async function capture(force = false, forcedProviderId?: string): Promise<void> 
       ?? (await sendMessage<ProviderContext | null>({ type: 'GET_PROVIDER_CONTEXT', url: location.href })
         .catch(() => null))?.provider.id;
     if (failedProviderId) {
-      await sendMessage({ type: 'CAPTURE_FAILURE', providerId: failedProviderId, reason: error instanceof Error ? error.message : 'capture failed' });
+      await sendMessage({
+        type: 'CAPTURE_FAILURE',
+        providerId: failedProviderId,
+        requestId,
+        reason: error instanceof Error ? error.message : 'capture failed',
+      });
     }
   } finally {
-    perfLog('content.capture', startedAt, { force, href: location.href }, 50);
+    perfLog('content.capture', startedAt, { force, href: urlForLog(location.href) }, 50);
     captureInFlight = false;
-    if (captureQueued) {
-      captureQueued = false;
-      const queued = queuedProviderId;
-      queuedProviderId = undefined;
-      void capture(true, queued);
-    }
+    const queued = captureQueue.dequeue();
+    if (queued) void capture(true, queued.providerId, queued.requestId);
   }
 }
 
@@ -226,11 +239,15 @@ chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendR
   if (message.type !== 'CAPTURE_NOW') return false;
   // Avoid heavy capture work while the user is teaching — SPA re-injects used to race and clear the panel.
   if (isPickerActive()) {
+    const providerId = 'providerId' in message && typeof message.providerId === 'string' ? message.providerId : undefined;
+    const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : undefined;
+    if (providerId) void sendMessage({ type: 'CAPTURE_FAILURE', providerId, requestId, reason: 'Capture paused while teaching is active.' });
     sendResponse({ ok: true, skipped: 'picker_active' });
     return false;
   }
   const pinnedProviderId = 'providerId' in message && typeof message.providerId === 'string' ? message.providerId : undefined;
-  void capture(true, pinnedProviderId).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: String(error) }));
+  const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : undefined;
+  void capture(true, pinnedProviderId, requestId).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: String(error) }));
   return true;
 });
 

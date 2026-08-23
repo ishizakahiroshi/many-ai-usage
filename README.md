@@ -10,17 +10,27 @@ many-ai-usage is a Manifest V3 Chrome/Firefox extension that shows visible AI su
 - The extension performs read-only page capture. It does not submit forms, send chats, or change provider settings.
 - Host access is requested per registered usage-page origin.
 - The extension starts with zero providers and makes no provider-page requests on first run.
-- Only when the user confirms **Try samples** does the extension fetch URL-only sample data from the documented GitHub raw registry. Captured usage data is never included in that request.
+- Only when the user confirms **Try samples** does the extension fetch the public starter configuration from the documented GitHub raw URL. It may contain reviewed taught selectors/fingerprints and sample letter-badge icon URLs, but never captured user data.
 
 ## Getting started
 
 1. Open the options page.
-2. Choose **Try samples ▸** to fetch six URL-only examples, or add your own usage page.
+2. Choose **Try samples ▸** to fetch seven starter providers (four include reviewed taught metrics), or add your own usage page.
 3. Open a registered page and use **Track this element** to teach the exact visible value.
 
-The sample registry is data, not executable code:
+The starter pack is data, not executable code:
 
-`https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/providers.json`
+`https://raw.githubusercontent.com/ishizakahiroshi/many-ai-usage/main/resources/starter.json`
+
+### Starter-pack trust model
+
+The opt-in URL intentionally follows this repository's live `main` branch so broken public-page
+selectors can be repaired without waiting for a new extension package. Imports are limited to the
+owner's fixed GitHub raw host, bounded by size/schema checks, restricted to HTTPS (or loopback HTTP
+for a provider URL), and require every URL match to stay on that provider's origin. Starter changes
+must be reviewed as public synthetic configuration in this repository; rollback is a revert of the
+starter change. The pack and its sample icons never contain or receive a user's page HTML, identity,
+credentials, or captured usage values.
 
 See the [Japanese usage guide](https://ishizakahiroshi.com/articles/many-ai-usage/usage.html) for the practice page and service-by-service navigation recipes.
 
@@ -40,8 +50,9 @@ this extension deliberately does not do.
 
 Each entry then refreshes inside its own container, so every account stays current without any
 switching. If you prefer to switch logins manually instead of using containers, **Teach the account
-on this page** lets you point at the text that identifies each account; only a salted hash of that
-text is stored, and a refresh writes to an entry only when the page really shows that account.
+on this page** lets you point at the text that identifies each account. The extension stores a
+text-free numeric DOM path plus a per-install salted hash; the identity text itself is used only for
+that hash operation and is not stored or logged. A refresh writes only when the page matches.
 
 ## Development
 
