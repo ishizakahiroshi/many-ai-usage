@@ -19,10 +19,10 @@
     "valibot": "^1.1.0"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.326",
-    "esbuild": "^0.25.6",
-    "jsdom": "^26.1.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "@types/chrome": "^0.2.8",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.0.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   }
 }
