@@ -85,3 +85,13 @@ secrets.*
 # docsweep が状態を書く場所（ラベル履歴・postpone 回数）。実行時の作業ファイルで
 # ソースではない。promote / relabel / sweep のたびに書き換わる
 .docsweep/
+
+# Local promo video sources and renders
+/brag-output/
+
+# === project-init 推奨の追記（2026-09-28・templates/gitignore から不足分のみ） ===
+coverage/
+.cache/
+*.tsbuildinfo
+.commandcode/
+.cursor/
