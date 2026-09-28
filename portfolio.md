@@ -1,4 +1,11 @@
 ---
+cover:
+  path: portfolio/overview-2026-09-28.jpg
+  alt: {ja: "many-ai-usage の紹介動画", en: "many-ai-usage overview video"}
+video:
+  provider: youtube
+  id: "GyUVHG-M5VE"
+  durationSeconds: 20
 schemaVersion: 1
 color: "#4a8fc9"
 initials: "mu"

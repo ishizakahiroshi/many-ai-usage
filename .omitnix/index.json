@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "641c541924ad299086c2d60408ee2bbf6921a687",
+    "commit": "c615f8ff42f860b7a9a9b81cd63d34286ce07759",
     "dirty": true,
-    "tool": "omitnix 0.1.1",
+    "tool": "omitnix 0.1.3",
     "partial": false,
     "adapters": [
       {
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 118,
+    "discovered": 119,
     "analyzed": 60,
     "unresolved": 2,
     "unknown": 1,
-    "unclaimed": 55,
+    "unclaimed": 56,
     "skipped_by_config": 0
   },
   "files": [
@@ -409,6 +409,14 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "portfolio/overview-2026-09-28.jpg",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.jpg'"
     },
     {
       "path": "resources/provider-sample-icons/README.md",
