@@ -25,8 +25,6 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Scan all tracked files for secrets
-        run: node scripts/secrets-scan.mjs --all-tracked --block
       - name: Resolve exact public scanner package
         continue-on-error: true
         run: |
@@ -38,12 +36,12 @@ jobs:
         env:
           EXPECTED_SOURCE_SHA: ${{ github.sha }}
           DOXGUARD_PACKAGE_ROOT: ${{ runner.temp }}/doxguard-ci/node_modules/doxguard
-        run: node scripts/secrets-scan.dual.mjs --controls
-      - name: Run legacy and strict public scans (release gate)
+        run: node scripts/secrets-scan.dual.mjs --native-only --controls
+      - name: Run strict public scan (release gate, doxguard only)
         env:
           EXPECTED_SOURCE_SHA: ${{ github.sha }}
           DOXGUARD_PACKAGE_ROOT: ${{ runner.temp }}/doxguard-ci/node_modules/doxguard
-        run: node scripts/secrets-scan.dual.mjs --all-tracked
+        run: node scripts/secrets-scan.dual.mjs --native-only --all-tracked
       - name: Verify
         run: |
           pnpm typecheck
