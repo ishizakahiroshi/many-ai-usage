@@ -58,11 +58,11 @@ starter は公開ページ変更へ extension 再配布なしで追従するた�
 
 書く瞬間の責務（固有名詞の一般化・fixture は合成データ等）は上記「AI 作業共通ルール」の参照先に従う。このリポジトリ固有の配線は以下:
 
-- scanner: `scripts/secrets-scan.mjs`（手動実行: `node scripts/secrets-scan.mjs --staged --block`）
+- scanner: doxguard と gitleaks（手動実行: `node scripts/secrets-scan.dual.mjs --native-only --staged`。`DOXGUARD_PACKAGE_ROOT` で導入済みの doxguard を指す）
 - layer 2: pre-commit hook（`.githooks/` 方式。有効化: `scripts/install-hooks.ps1` または `.sh`）
-- layer 3: `.github/workflows/secrets-scan.yml`（branch / PR の tracked file、CI では構造 regex）
+- layer 3: `.github/workflows/secrets-scan.yml`（branch / PR の tracked file を doxguard で検査し、別 job で gitleaks が走る）
 - layer 4: `.github/workflows/release.yml` が tag build 前に `--all-tracked --block` を再実行する。作者環境の外部 release 手順が KB watchlist 付き scan を追加する場合があるが、それは public clone の保証には含めない
-- env (full coverage に必要・未設定なら構造 regex のみで継続): `KB_ROOT` / `FAMILY_ROOT`。設定詳細は `scripts/secrets-scan.mjs` の冒頭コメント
+- env: 監視語リスト（watchlist）は公開しない。未設定の環境（公開 CI を含む）では構造パターンのみで継続する
 - 参照実装・設計詳細: `worklog-bridge` リポの `docs/local/secrets-scan-design/`（gitignored・公開しない）
 
 ## 関連ドキュメント
